@@ -1,15 +1,14 @@
 """
 Tests for bottom-up positioning with Hungarian algorithm assignment.
 """
+
 import numpy as np
 import pytest
 
 from lineage_simulator import (
-    Cell,
     Embryo,
     angular_distance,
     generate_tree,
-    build_id_dict_and_layers,
     build_embryo,
     coordinates_generate_radians,
     build_cost_matrix,
@@ -105,7 +104,11 @@ def test_bottom_up_position_format():
         dispersal=0.0,
     )
     for leaf in ordered:
-        r, theta, phi = leaf.layer_position[0], leaf.layer_position[1], leaf.layer_position[2]
+        r, theta, phi = (
+            leaf.layer_position[0],
+            leaf.layer_position[1],
+            leaf.layer_position[2],
+        )
         assert r > 0
         assert 0 <= theta < 2 * np.pi
         assert 0 <= phi <= np.pi
@@ -180,7 +183,9 @@ def test_bottom_up_children_near_parent():
 
 def test_bottom_up_requires_generation_layers():
     """Raises if generation_layers is None."""
-    root, leaves, sibling_pairs, _, _ = generate_tree(generations=2, include_metadata=True)
+    root, leaves, sibling_pairs, _, _ = generate_tree(
+        generations=2, include_metadata=True
+    )
     with pytest.raises(ValueError, match="generation_layers is required"):
         _bottom_up_position_leaves(
             generation_layers=None,
@@ -227,7 +232,9 @@ def test_build_embryo_leaf_positions_are_unit_vectors():
         mito_rate=0.0,
         seed=3,
     )
-    norms = [np.linalg.norm(np.asarray(leaf.position, dtype=float)) for leaf in emb.leaves]
+    norms = [
+        np.linalg.norm(np.asarray(leaf.position, dtype=float)) for leaf in emb.leaves
+    ]
     assert all(np.isclose(norm, 1.0, atol=1e-9) for norm in norms)
 
 
@@ -439,8 +446,8 @@ def test_build_embryo_with_placement_strategy_greedy():
     )
     assert isinstance(emb, Embryo)
     assert len(emb.leaves) == 8
-    assert all(l.position is not None for l in emb.leaves)
-    positions = [tuple(np.asarray(l.position)) for l in emb.leaves]
+    assert all(leaf.position is not None for leaf in emb.leaves)
+    positions = [tuple(np.asarray(leaf.position)) for leaf in emb.leaves]
     assert len(set(positions)) == len(positions)
 
 
@@ -460,6 +467,6 @@ def test_build_embryo_greedy_reproducible_with_seed():
         seed=99,
         placement_strategy="greedy",
     )
-    pos1 = np.array([l.position for l in emb1.leaves])
-    pos2 = np.array([l.position for l in emb2.leaves])
+    pos1 = np.array([leaf.position for leaf in emb1.leaves])
+    pos2 = np.array([leaf.position for leaf in emb2.leaves])
     np.testing.assert_array_almost_equal(pos1, pos2)

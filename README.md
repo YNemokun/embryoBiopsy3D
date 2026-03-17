@@ -1,4 +1,4 @@
-# EmbryoBiopsy3D
+# embryoBiopsy3D
 
 `embryoBiopsy3D` is a Python library that constructs an spherical embryo, placing cells with respect to their lineage history and simulating spatial dispersal movements. It then allows biopsy operations, including rebiopsy of the same embryo, and returns categorized results of the sample. This simulation aims to assist understanding and improvement of IVF's genetic testing process.
 
@@ -21,8 +21,6 @@ With the project root on `PYTHONPATH` (via `pyproject.toml`), run:
 ```bash
 pytest test/
 ```
-
-If using conda, activate your env first: `conda activate embryo-simulator`
 
 ## Dependencies
 

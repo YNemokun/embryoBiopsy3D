@@ -2,7 +2,7 @@
 Tests for lineage_simulator: Embryo API, _lineage_distance, Cell.set_aneuploid,
 and build_embryo / _position_leaves validation.
 """
-import numpy as np
+
 import pytest
 
 from lineage_simulator import (
@@ -10,9 +10,7 @@ from lineage_simulator import (
     Embryo,
     generate_tree,
     build_embryo,
-    build_id_dict_and_layers,
     _lineage_distance,
-    _position_leaves,
     coordinates_generate,
 )
 
@@ -116,11 +114,13 @@ def test_embryo_set_aneuploid_by_id_updates_only_cell_when_include_subtree_false
         generation_layers=generation_layers,
     )
     leaf_id = leaves[0].id
-    affected = emb.set_aneuploid_by_id(leaf_id, is_aneuploid=True, include_subtree=False)
+    affected = emb.set_aneuploid_by_id(
+        leaf_id, is_aneuploid=True, include_subtree=False
+    )
     assert leaves[0].is_aneuploid
     assert len(affected) == 1
     # Other leaves should remain euploid
-    assert sum(1 for l in leaves if l.is_aneuploid) == 1
+    assert sum(1 for leaf in leaves if leaf.is_aneuploid) == 1
 
 
 def test_embryo_get_node_by_generation_index_raises_when_layers_not_initialized():

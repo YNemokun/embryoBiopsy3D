@@ -1,27 +1,41 @@
 # sampling tests for the basic cases
-import math, numpy as np
+import math
+import numpy as np
 import pytest
 from lineage_simulator import Cell
 from biopsy import Sampling
 
+
 def unit(v):
-    v = np.asarray(v, float); n = np.linalg.norm(v); return v/(n or 1)
+    v = np.asarray(v, float)
+    n = np.linalg.norm(v)
+    return v / (n or 1)
+
 
 def make_cell(pos):
-    c = Cell(None, 0); c.position = unit(pos).tolist(); 
+    c = Cell(None, 0)
+    c.position = unit(pos).tolist()
     return c
 
+
 def make_simple_leaves():
-    return [make_cell(p) for p in ([1,0,0],[0,1,0],[0,0,1],[-1,0,0],[0,-1,0],[0,0,-1])]
+    return [
+        make_cell(p)
+        for p in ([1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0], [0, -1, 0], [0, 0, -1])
+    ]
+
 
 def make_cells_with_flags(flags):
     """Create positioned cells and set aneuploidy flags to the provided booleans."""
-    leaves = make_simple_leaves()[:len(flags)]
+    leaves = make_simple_leaves()[: len(flags)]
     for cell, flag in zip(leaves, flags):
         cell.is_aneuploid = bool(flag)
     return leaves
 
-def deg(rad): return rad * 180.0 / math.pi
+
+def deg(rad):
+    return rad * 180.0 / math.pi
+
 
 def test_returns_all_leaves():
     leaves = make_simple_leaves()
@@ -34,6 +48,7 @@ def test_returns_all_leaves():
     # We expect it to return exactly n_cells 'selected' (including center)
     assert len(res["selected"]) == n_cells
     assert center in res["selected"]
+
 
 def test_threshold_compliance_basic():
     leaves = make_simple_leaves()
@@ -55,6 +70,7 @@ def test_threshold_compliance_basic():
             # Relaxation means threshold was slid left; just check non-negativity.
             assert d >= 0.0
 
+
 def test_relaxation_triggers_when_needed():
     leaves = make_simple_leaves()
     s = Sampling(leaves)
@@ -67,6 +83,7 @@ def test_relaxation_triggers_when_needed():
     # Still returns n_cells total (center + others, after relaxation/window shift)
     assert len(res["selected"]) == n_cells
     assert center in res["selected"]
+
 
 def test_monotone_with_dispersal():
     """
@@ -82,6 +99,7 @@ def test_monotone_with_dispersal():
     res2 = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.50)
     assert res2["threshold"] >= res1["threshold"] - 1e-12
 
+
 def test_selected_are_farthest_when_dispersal_high():
     """
     With very high dispersal, the slice should start near the end (farthest cells).
@@ -93,7 +111,7 @@ def test_selected_are_farthest_when_dispersal_high():
     n_cells = 5
 
     res = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.9)
-    # Compute all distances (excluding center) 
+    # Compute all distances (excluding center)
     dists = []
     for c in leaves:
         if c is center:
@@ -102,13 +120,14 @@ def test_selected_are_farthest_when_dispersal_high():
     dists_sorted = sorted(dists, reverse=True)
 
     # validate via a distance threshold
-    cutoff = dists_sorted[n_cells - 2]  # (n_cells-1) selected 
+    cutoff = dists_sorted[n_cells - 2]  # (n_cells-1) selected
     eps = 1e-12
     for c in res["selected"]:
         if c is center:
             continue
         d = s.dist_on_sphere(center.position, c.position)
         assert d + eps >= cutoff
+
 
 def test_current_biopsy_includes_center_and_size():
     leaves = make_simple_leaves()
@@ -122,6 +141,7 @@ def test_current_biopsy_includes_center_and_size():
     # ensure no duplicates
     assert len({id(c) for c in res["selected"]}) == n_cells
 
+
 def test_current_biopsy_respects_rng_for_center_choice():
     leaves = make_simple_leaves()
     rng = np.random.default_rng(123)
@@ -131,6 +151,7 @@ def test_current_biopsy_respects_rng_for_center_choice():
     center = res["center_leaf"]
     assert center in res["selected"]
     assert len(res["selected"]) == 2
+
 
 def test_current_biopsy_n_cells_one_returns_center():
     leaves = make_simple_leaves()
@@ -153,29 +174,40 @@ def test_current_biopsy_is_invariant_to_coordinate_scale():
     scaled_res = Sampling(scaled).current_biopsy(n_cells=4, center_leaf=scaled_center)
 
     assert len(baseline["selected"]) == len(scaled_res["selected"])
-    baseline_positions = {tuple(np.round(np.asarray(cell.position, dtype=float), 8)) for cell in baseline["selected"]}
+    baseline_positions = {
+        tuple(np.round(np.asarray(cell.position, dtype=float), 8))
+        for cell in baseline["selected"]
+    }
     scaled_positions = {
-        tuple(np.round(np.asarray(cell.position, dtype=float) / np.linalg.norm(cell.position), 8))
+        tuple(
+            np.round(
+                np.asarray(cell.position, dtype=float) / np.linalg.norm(cell.position),
+                8,
+            )
+        )
         for cell in scaled_res["selected"]
     }
     assert scaled_positions == baseline_positions
+
 
 def test_categorize_biopsy_all_euploid():
     leaves = make_cells_with_flags([False, False, False])
     s = Sampling(leaves)
     assert s.categorize_biopsy(leaves) == ("euploid", 0)
 
+
 def test_categorize_biopsy_all_aneuploid():
     leaves = make_cells_with_flags([True, True, True])
     s = Sampling(leaves)
     assert s.categorize_biopsy(leaves) == ("aneuploid", 3)
 
+
 def test_categorize_biopsy_mixed_returns_mosaic():
     mixed_configs = [
-        [True, False],          # aneuploid then euploid
-        [False, True],          # euploid then aneuploid
-        [True, False, True],    # alternating, starts aneuploid
-        [False, True, False],   # alternating, starts euploid
+        [True, False],  # aneuploid then euploid
+        [False, True],  # euploid then aneuploid
+        [True, False, True],  # alternating, starts aneuploid
+        [False, True, False],  # alternating, starts euploid
     ]
     for flags in mixed_configs:
         leaves = make_cells_with_flags(flags)

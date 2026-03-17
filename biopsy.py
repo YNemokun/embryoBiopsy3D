@@ -15,7 +15,9 @@ class Sampling:
     def __init__(self, leaves, rng: Optional[np.random.Generator] = None):
         self.leaves = [cell for cell in leaves if cell.position is not None]
         if not self.leaves:
-            raise ValueError("Sampling: leaves must have .position set (use build_embryo first).")
+            raise ValueError(
+                "Sampling: leaves must have .position set (use build_embryo first)."
+            )
         self.rng = _ensure_rng(rng)
         coords = np.array([cell.position for cell in self.leaves])
         # cache distance by coordinates
@@ -45,7 +47,7 @@ class Sampling:
         return order
 
     # randomly pick a cluster of 5 cells
-    def current_biopsy(self, n_cells = 5, center_leaf=None):
+    def current_biopsy(self, n_cells=5, center_leaf=None):
         # using closeness measurement of the leaves, pick five consecutive cells from the coordinates
         if center_leaf is None:
             center_leaf = self.rng.choice(self.leaves)
@@ -57,7 +59,7 @@ class Sampling:
         return {"center_leaf": center_leaf, "selected": selected_cells}
 
     # randomly pick 5 cells slightly apart from the center cell
-    def biopsy_with_distance(self, n_cells = 5, center_leaf=None, distance = 0.2):
+    def biopsy_with_distance(self, n_cells=5, center_leaf=None, distance=0.2):
         """
         Distance fraction: percentage of the farthest possible distance from the center.
         The returned 'selected' list includes the center cell.
@@ -67,16 +69,26 @@ class Sampling:
 
         total_leaves = len(self.leaves)
         if n_cells <= 0:
-            return {"center_leaf": center_leaf, "selected": [], "threshold": 0.0, "relaxed_by": 0}
+            return {
+                "center_leaf": center_leaf,
+                "selected": [],
+                "threshold": 0.0,
+                "relaxed_by": 0,
+            }
 
         if n_cells >= total_leaves:
             selected = list(self.leaves)
-            return {"center_leaf": center_leaf, "selected": selected, "threshold": 0.0, "relaxed_by": max(0, n_cells - total_leaves)}
+            return {
+                "center_leaf": center_leaf,
+                "selected": selected,
+                "threshold": 0.0,
+                "relaxed_by": max(0, n_cells - total_leaves),
+            }
 
         center = np.asarray(center_leaf.position)
 
         # calculate other cell's distance to the center leaf
-        pairs  = []
+        pairs = []
         for cell in self.leaves:
             if cell is center_leaf:
                 continue
@@ -85,7 +97,7 @@ class Sampling:
             pairs.append((dist, cell))
 
         # sort by distance to center leaf
-        pairs.sort(key=lambda t: t[0])  
+        pairs.sort(key=lambda t: t[0])
         # establish the threshold (inclusive)
         threshold = pairs[-1][0] * distance
 
@@ -93,9 +105,14 @@ class Sampling:
         n_needed = max(0, n_cells - 1)
 
         if n_needed == 0:
-            return {"center_leaf": center_leaf, "selected": [center_leaf], "threshold": threshold, "relaxed_by": 0}
+            return {
+                "center_leaf": center_leaf,
+                "selected": [center_leaf],
+                "threshold": threshold,
+                "relaxed_by": 0,
+            }
 
-        # select n_needed cells only if they are just above the threshold 
+        # select n_needed cells only if they are just above the threshold
         start_index = None
         for i, (d, _) in enumerate(pairs):
             if d >= threshold:
@@ -104,9 +121,9 @@ class Sampling:
 
         if start_index is None:
             start_index = len(pairs)
-        
+
         select_len = len(pairs) - start_index
-        
+
         # if there aren't enough cells to satisfy this boundary
         # relax the threshold
         if select_len >= n_needed:
@@ -114,25 +131,30 @@ class Sampling:
         else:
             relaxed_by = n_needed - select_len
             start_index = max(0, start_index - relaxed_by)
-            
-        selected_cells = [center_leaf] + [cell for _, cell in pairs[start_index:start_index + n_needed]]
 
-        return {"center_leaf": center_leaf, "selected": selected_cells, "threshold": threshold,
-                "relaxed_by": relaxed_by}
+        selected_cells = [center_leaf] + [
+            cell for _, cell in pairs[start_index : start_index + n_needed]
+        ]
+
+        return {
+            "center_leaf": center_leaf,
+            "selected": selected_cells,
+            "threshold": threshold,
+            "relaxed_by": relaxed_by,
+        }
 
     def categorize_biopsy(self, biopsy_leaves):
-
-        '''
-        Categorize the biopsy into euploid (all euploid cells), mosaic (mixture of euploid and aneuploid cells), 
+        """
+        Categorize the biopsy into euploid (all euploid cells), mosaic (mixture of euploid and aneuploid cells),
         or aneuploid (all aneuploid cells). Return the category and the number of aneuploid cells.
-        '''
+        """
         if not biopsy_leaves:
             raise ValueError("Cannot categorize biopsy: no leaves provided.")
         aneuploid_count = 0
         for leaf in biopsy_leaves:
             if leaf.is_aneuploid:
                 aneuploid_count += 1
-        
+
         # categorize based on the number of aneuploid cells
         if aneuploid_count == 0:
             category = "euploid"
@@ -140,5 +162,5 @@ class Sampling:
             category = "aneuploid"
         else:
             category = "mosaic"
-        
+
         return category, aneuploid_count

@@ -70,9 +70,9 @@ class FakeSampling:
         return {"center_leaf": center_leaf, "selected": selected}
 
     def categorize_biopsy(self, biopsy_leaves):
-        aneuploid_count = sum(l.is_aneuploid for l in biopsy_leaves)
+        aneuploid_count = sum(leaf.is_aneuploid for leaf in biopsy_leaves)
         has_aneu = aneuploid_count > 0
-        has_eu = any(not l.is_aneuploid for l in biopsy_leaves)
+        has_eu = any(not leaf.is_aneuploid for leaf in biopsy_leaves)
         if has_aneu and has_eu:
             return "mosaic", aneuploid_count
         if has_aneu:
@@ -194,7 +194,9 @@ def test_distance_param_allows_close_cells_when_zero():
         seed=321,
     )
     meta = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.0, return_metadata=True)
-    assert meta["actual_distance"] <= math.pi  # should not error; weak bound to avoid flakiness
+    assert (
+        meta["actual_distance"] <= math.pi
+    )  # should not error; weak bound to avoid flakiness
 
 
 def test_actual_distance_matches_center_distance():

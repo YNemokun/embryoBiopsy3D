@@ -1,8 +1,8 @@
 """
 Lineage and spatial placement utilities for embryo simulation.
 
-This module builds a binary lineage tree simulating cell division, 
-annotates aneuploidy, and places leaf cells on a sphere for downstream 
+This module builds a binary lineage tree simulating cell division,
+annotates aneuploidy, and places leaf cells on a sphere for downstream
 biopsy and visualization workflows.
 """
 
@@ -102,6 +102,7 @@ class Embryo:
         node = self.get_node_by_generation_index(generation, index)
         return node.set_aneuploid(is_aneuploid, include_subtree)
 
+
 class Cell:
     """Cell structure with lineage info, aneuploidy flag, position, and children."""
 
@@ -110,8 +111,12 @@ class Cell:
         self.parent = parent
         self.children = []
         self.generation = generation  # root is the 0th generation; nth generation = n divisions happened
-        self.position = None    # Cartesian unit vector positions, for plotting and all latter uses
-        self.layer_position = None  # Radian, for calculating cell placement during construction
+        self.position = (
+            None  # Cartesian unit vector positions, for plotting and all latter uses
+        )
+        self.layer_position = (
+            None  # Radian, for calculating cell placement during construction
+        )
         self.is_dead = False  # For early cell deaths
         self.is_aneuploid = False  # default to euploid
 
@@ -155,7 +160,7 @@ def build_id_dict_and_layers(root):
     # Empty root means no nodes and no generation buckets.
     if root is None:
         return {}, []
-    # id_dict: fast lookup by UUID 
+    # id_dict: fast lookup by UUID
     # generation_layers: index leaves by generation
     id_dict = {}
     generation_layers = []
@@ -191,6 +196,7 @@ def _initialize_generation_metadata(
             [[] for _ in range(generations + 1 - len(generation_layers))]
         )
     return id_dict, generation_layers
+
 
 def cell_division(
     root,
@@ -255,7 +261,9 @@ def cell_division(
     return root, current_generation, sibling_pairs
 
 
-def apply_error_rates(root, meio_rate, mito_rate, rng: Optional[np.random.Generator] = None):
+def apply_error_rates(
+    root, meio_rate, mito_rate, rng: Optional[np.random.Generator] = None
+):
     """Assign meiotic/mitotic errors on an existing tree structure (BFS)."""
     rng = _ensure_rng(rng)
     # for easy reset
@@ -357,6 +365,7 @@ def coordinates_generate_radians(n):
     phi = arccos(1 - 2 * (i + 0.5) / n)
     return np.c_[theta, phi]
 
+
 def _angles_to_cartesian(theta, phi, radius):
     """Convert spherical (theta, phi) to cartesian (x, y, z) at given radius."""
     x = radius * cos(theta) * sin(phi)
@@ -375,6 +384,7 @@ def _cartesian_to_angles(x, y, z):
     if theta < 0:
         theta += 2 * pi
     return theta, phi
+
 
 # -----------------------------------------------------------------------------
 # Lineage ordering and placement helpers
@@ -436,6 +446,7 @@ def _perturb_angles_from_parent(theta, phi, alpha, beta):
     child_phi = _reflect_phi(phi + dphi)
     return np.asarray([child_theta, child_phi], dtype=float)
 
+
 def build_cost_matrix(child_ideal_angles, fibonacci_angles):
     """Build C[i, j] = angular distance from child target i to slot j."""
     child_ideal_angles = np.asarray(child_ideal_angles, dtype=float)
@@ -460,6 +471,7 @@ def build_cost_matrix(child_ideal_angles, fibonacci_angles):
         + cos_child_phi * cos_slot_phi
     )
     return np.arccos(np.clip(cos_gamma, -1.0, 1.0))
+
 
 def _convert_layered_positions_to_cartesian_unit_sphere(cells):
     """Cartesian unit-vector positions from each cell's layered coordinates."""
@@ -501,7 +513,13 @@ def _assign_direct_layer_positions(current_layer, angles, radius):
         node.layer_position = [radius, angle[0], angle[1]]
 
 
-def _generation_targets(previous_layer, generation, total_layers, alpha, rng: Optional[np.random.Generator] = None):
+def _generation_targets(
+    previous_layer,
+    generation,
+    total_layers,
+    alpha,
+    rng: Optional[np.random.Generator] = None,
+):
     """Return child ideals and child ordering for one generation."""
     child_ideal_angles = []
     next_layer = []
@@ -516,13 +534,12 @@ def _generation_targets(previous_layer, generation, total_layers, alpha, rng: Op
         child_count = len(parent.children)
         if child_count == 0:
             continue
-        
+
         # Calculate base dispersal direction
         parent_theta = float(parent.layer_position[1])
         parent_phi = float(parent.layer_position[2])
         # randomly select an angle from beta0_angles
         beta0 = beta0_angles[rng.integers(0, len(beta0_angles))]
-        
 
         for child_idx, child in enumerate(parent.children):
             if child_count == 2:
@@ -560,7 +577,11 @@ def _assign_hungarian_slots(next_layer, child_ideal_angles, angles, radius):
     # assign the coordinates to the children based on the assignments
     # child_ind[i] and coord_ind[i] are paired: child child_ind[i] gets coord_ind[i]
     for child_idx, slot_idx in zip(child_indices, slot_indices):
-        next_layer[child_idx].layer_position = [radius, angles[slot_idx][0], angles[slot_idx][1]]
+        next_layer[child_idx].layer_position = [
+            radius,
+            angles[slot_idx][0],
+            angles[slot_idx][1],
+        ]
 
 
 def _assign_greedy_slots(next_layer, child_ideal_angles, angles, radius, randomizer):
@@ -570,7 +591,7 @@ def _assign_greedy_slots(next_layer, child_ideal_angles, angles, radius, randomi
 
     child_order = list(range(len(next_layer)))
     randomizer.shuffle(child_order)
-    
+
     # reuse the cost matrix instead of recalculating it for each child
     cost_matrix = build_cost_matrix(child_ideal_angles, angles)
 
@@ -590,7 +611,9 @@ def _assign_greedy_slots(next_layer, child_ideal_angles, angles, radius, randomi
         cost_matrix[:, slot_idx] = np.inf
 
 
-def _run_bottom_up_positioning(generation_layers, dispersal, *, placement_strategy, rng=None):
+def _run_bottom_up_positioning(
+    generation_layers, dispersal, *, placement_strategy, rng=None
+):
     """Shared implementation for layered bottom-up leaf placement."""
     _validate_positioning_inputs(generation_layers, dispersal)
     _clear_generation_positions(generation_layers)
@@ -615,14 +638,12 @@ def _run_bottom_up_positioning(generation_layers, dispersal, *, placement_strate
             continue
 
         # generate child ideals for the current generation
-        next_layer, child_ideal_angles, generation_sibling_pairs = (
-            _generation_targets(
-                generation_layers[generation - 1],
-                generation,
-                total_layers,
-                alpha,
-                rng=rng,
-            )
+        next_layer, child_ideal_angles, generation_sibling_pairs = _generation_targets(
+            generation_layers[generation - 1],
+            generation,
+            total_layers,
+            alpha,
+            rng=rng,
         )
 
         if placement_strategy == "hungarian":
@@ -636,13 +657,17 @@ def _run_bottom_up_positioning(generation_layers, dispersal, *, placement_strate
                 randomizer,
             )
         else:
-            raise ValueError("placement_strategy must be either 'hungarian' or 'greedy'.")
+            raise ValueError(
+                "placement_strategy must be either 'hungarian' or 'greedy'."
+            )
 
         sibling_pairs.extend(generation_sibling_pairs)
         generation_layers[generation] = next_layer
 
     final_layer = generation_layers[-1] if generation_layers else []
-    coords_array = np.asarray([leaf.layer_position for leaf in final_layer], dtype=float)
+    coords_array = np.asarray(
+        [leaf.layer_position for leaf in final_layer], dtype=float
+    )
     return final_layer, coords_array, sibling_pairs
 
 
@@ -686,10 +711,12 @@ def _position_leaves(
                 rng=rng,
             )
         elif placement_strategy == "greedy":
-            ordered_leaves, layer_coords, sibling_pairs = _bottom_up_position_leaves_greedy(
-                generation_layers=generation_layers,
-                dispersal=placement_dispersal,
-                rng=rng,
+            ordered_leaves, layer_coords, sibling_pairs = (
+                _bottom_up_position_leaves_greedy(
+                    generation_layers=generation_layers,
+                    dispersal=placement_dispersal,
+                    rng=rng,
+                )
             )
         else:
             raise ValueError(
@@ -703,7 +730,9 @@ def _position_leaves(
     return ordered_leaves, coords_array, sibling_pairs
 
 
-def _bottom_up_position_leaves(generation_layers, dispersal, rng: Optional[np.random.Generator] = None):
+def _bottom_up_position_leaves(
+    generation_layers, dispersal, rng: Optional[np.random.Generator] = None
+):
     """Assign coordinates per generation using Hungarian algorithm for parent-local children.
 
     - Radius stays fixed per generation: radius = generation + 1.
