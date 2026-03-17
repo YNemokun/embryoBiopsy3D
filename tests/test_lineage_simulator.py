@@ -5,7 +5,7 @@ and build_embryo / _position_leaves validation.
 
 import pytest
 
-from lineage_simulator import (
+from embryo_biopsy_3d.lineage_simulator import (
     Cell,
     Embryo,
     generate_tree,

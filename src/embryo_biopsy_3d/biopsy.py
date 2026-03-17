@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from lineage_simulator import _ensure_rng, angular_distance
+from .lineage_simulator import _ensure_rng, angular_distance
 
 
 class Sampling:

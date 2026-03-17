@@ -1,13 +1,14 @@
 # This file contains the rebiopsy simulation
 
-from biopsy import Sampling
-from lineage_simulator import (
+import numpy as np
+
+from .biopsy import Sampling
+from .lineage_simulator import (
     build_embryo,
     generate_tree,
     apply_error_rates,
     reset_flags,
 )
-import numpy as np
 
 DEFAULT_RELAX_STEP_FRACTION = 0.02
 DEFAULT_MAX_RELAX_ATTEMPTS = 20

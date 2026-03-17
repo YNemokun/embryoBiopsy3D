@@ -5,7 +5,7 @@ Tests for bottom-up positioning with Hungarian algorithm assignment.
 import numpy as np
 import pytest
 
-from lineage_simulator import (
+from embryo_biopsy_3d.lineage_simulator import (
     Embryo,
     angular_distance,
     generate_tree,
