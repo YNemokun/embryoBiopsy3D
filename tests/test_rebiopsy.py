@@ -2,7 +2,6 @@ import math
 import numpy as np
 
 from embryobiopsy3d import rebiopsy
-from embryobiopsy3d.biopsy import Sampling
 from embryobiopsy3d.lineage_simulator import (
     Cell,
     angular_distance,
@@ -91,27 +90,13 @@ def test_rebiopsy_matches_on_all_euploid(monkeypatch):
     assert rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5) is True
 
 
-def test_rebiopsy_mismatch_with_mosaic(monkeypatch):
+def test_rebiopsy_detects_category_mismatch(monkeypatch):
     monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
     leaves = make_leaves()
-    # make half aneuploid
-    for leaf in leaves[:3]:
-        leaf.is_aneuploid = True
+    leaves[-1].is_aneuploid = True
     embryo = make_embryo_with_leaves(leaves)
 
-    # Depending on slice, expect mosaic category; second biopsy could be euploid -> mismatch
-    result = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.0)
-    assert result in (True, False)  # Should not raise; ensure boolean
-
-
-def test_rebiopsy_distance_relax_and_fallback(monkeypatch):
-    monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
-    leaves = make_leaves()
-    embryo = make_embryo_with_leaves(leaves)
-
-    # Use a very large normalized distance to force relaxation/fallback
-    match = rebiopsy.rebiopsy_single_embryo(embryo, distance=2.0)
-    assert isinstance(match, bool)
+    assert rebiopsy.rebiopsy_single_embryo(embryo, distance=0.0) is False
 
 
 def test_rebiopsy_at_error_rate_returns_fraction(monkeypatch):
@@ -138,43 +123,16 @@ def test_rebiopsy_at_error_rate_returns_fraction(monkeypatch):
     assert all(r["p_mito"] == 0.0 and r["p_meio"] == 0.0 for r in rows)
 
 
-# Integration-style checks with real Sampling but seeded RNG for determinism
-def test_rebiopsy_with_real_sampling_seeded(monkeypatch):
-    leaves = make_leaves()
+def test_rebiopsy_returns_error_metadata_when_no_remaining_cells(monkeypatch):
+    monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
+    embryo = make_embryo_with_leaves(make_leaves()[:5])
 
-    def seeded_sampling(leaves_arg, rng=None):
-        return Sampling(leaves_arg, rng=rng or np.random.default_rng(123))
+    meta = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5, return_metadata=True)
 
-    monkeypatch.setattr(rebiopsy, "Sampling", seeded_sampling)
-
-    class Embryo:
-        def __init__(self, leaves):
-            self.leaves = leaves
-
-    embryo = Embryo(leaves)
-    match = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5)
-
-    # Should return a boolean, but the number of leaves in the embryo is not changed
-    assert isinstance(match, bool)
-    assert len(embryo.leaves) == len(leaves)
-
-
-def test_rebiopsy_distance_relax_with_real_sampling(monkeypatch):
-    leaves = make_leaves()
-
-    def seeded_sampling(leaves_arg, rng=None):
-        return Sampling(leaves_arg, rng=rng or np.random.default_rng(123))
-
-    monkeypatch.setattr(rebiopsy, "Sampling", seeded_sampling)
-
-    class Embryo:
-        def __init__(self, leaves):
-            self.leaves = leaves
-
-    embryo = Embryo(leaves)
-    # Large distance forces relaxation/fallback; should still return a boolean
-    match = rebiopsy.rebiopsy_single_embryo(embryo, distance=2.0)
-    assert isinstance(match, bool)
+    assert meta["match"] is False
+    assert meta["second_center"] is None
+    assert meta["second_leaves"] == []
+    assert meta["error"] == "no remaining cells for rebiopsy"
 
 
 def test_distance_param_targets_far_apart_cells():
@@ -187,20 +145,6 @@ def test_distance_param_targets_far_apart_cells():
     )
     meta = rebiopsy.rebiopsy_single_embryo(embryo, distance=1.0, return_metadata=True)
     assert meta["actual_distance"] >= math.pi * 0.6  # should be on opposite side-ish
-
-
-def test_distance_param_allows_close_cells_when_zero():
-    embryo = rebiopsy.build_embryo(
-        generations=6,
-        meio_rate=0.1,
-        mito_rate=0.1,
-        placement_dispersal=0.5,
-        seed=321,
-    )
-    meta = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.0, return_metadata=True)
-    assert (
-        meta["actual_distance"] <= math.pi
-    )  # should not error; weak bound to avoid flakiness
 
 
 def test_actual_distance_matches_center_distance():

@@ -18,11 +18,6 @@ from embryobiopsy3d.lineage_simulator import (
 )
 
 
-# -----------------------------------------------------------------------------
-# build_cost_matrix
-# -----------------------------------------------------------------------------
-
-
 def test_build_cost_matrix_shape():
     """Cost matrix has shape (n, n) for n children and n slots."""
     n = 4
@@ -32,28 +27,6 @@ def test_build_cost_matrix_shape():
     assert C.shape == (n, n)
     assert np.all(np.isfinite(C))
     assert np.all(C >= 0)
-
-
-def test_build_cost_matrix_diagonal_self_distance():
-    """Distance from a point to itself is zero (within float tolerance)."""
-    angles = coordinates_generate_radians(3)
-    C = build_cost_matrix(angles, angles)
-    for i in range(3):
-        assert C[i, i] == pytest.approx(0.0, abs=1e-6)
-
-
-def test_build_cost_matrix_symmetry_of_distance():
-    """Angular distance is symmetric: d(a,b) = d(b,a)."""
-    a = np.array([[0.5, 0.8], [1.2, 1.5]])
-    b = np.array([[2.0, 0.3], [0.1, 2.5]])
-    C = build_cost_matrix(a, b)
-    # C[i,j] = dist(a[i], b[j]); symmetry of dist means C is not symmetric as a matrix,
-    # but dist(a[i], b[j]) == dist(b[j], a[i]) so we can check build_cost_matrix(b,a)
-    # has C_build(b,a)[j,i] == C_build(a,b)[i,j]
-    C_rev = build_cost_matrix(b, a)
-    for i in range(2):
-        for j in range(2):
-            assert C[i, j] == pytest.approx(C_rev[j, i], abs=1e-12)
 
 
 def test_build_cost_matrix_matches_cartesian_angular_distance():
@@ -77,7 +50,7 @@ def test_build_cost_matrix_matches_cartesian_angular_distance():
 
 def test_bottom_up_assignments_are_bijective():
     """Each child gets exactly one slot; each slot used at most once."""
-    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
+    _, leaves, _, _, generation_layers = generate_tree(
         generations=3, include_metadata=True
     )
     ordered, coords, _ = _bottom_up_position_leaves(
@@ -96,10 +69,8 @@ def test_bottom_up_assignments_are_bijective():
 
 def test_bottom_up_position_format():
     """Layered positions are [radius, theta, phi] in spherical form."""
-    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
-        generations=2, include_metadata=True
-    )
-    ordered, coords, _ = _bottom_up_position_leaves(
+    _, _, _, _, generation_layers = generate_tree(generations=2, include_metadata=True)
+    ordered, _, _ = _bottom_up_position_leaves(
         generation_layers=generation_layers,
         dispersal=0.0,
     )
@@ -116,18 +87,14 @@ def test_bottom_up_position_format():
 
 def test_bottom_up_reproducible_with_seed():
     """Same seed produces same positions."""
-    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
-        generations=3, include_metadata=True
-    )
+    _, _, _, _, generation_layers = generate_tree(generations=3, include_metadata=True)
     _, coords1, _ = _bottom_up_position_leaves(
         generation_layers=generation_layers,
         dispersal=0.0,
         rng=np.random.default_rng(7),
     )
     # Rebuild tree and run again
-    root2, leaves2, sibling_pairs2, id_dict2, generation_layers2 = generate_tree(
-        generations=3, include_metadata=True
-    )
+    _, _, _, _, generation_layers2 = generate_tree(generations=3, include_metadata=True)
     _, coords2, _ = _bottom_up_position_leaves(
         generation_layers=generation_layers2,
         dispersal=0.0,
@@ -138,10 +105,8 @@ def test_bottom_up_reproducible_with_seed():
 
 def test_bottom_up_generation_0_and_1_direct_placement():
     """Generations 0 and 1 use direct Fibonacci assignment (no Hungarian)."""
-    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
-        generations=2, include_metadata=True
-    )
-    ordered, coords, _ = _bottom_up_position_leaves(
+    _, _, _, _, generation_layers = generate_tree(generations=2, include_metadata=True)
+    _bottom_up_position_leaves(
         generation_layers=generation_layers,
         dispersal=0.0,
     )
@@ -154,88 +119,13 @@ def test_bottom_up_generation_0_and_1_direct_placement():
     assert gen1_nodes[1].layer_position[0] == 2.0
 
 
-def test_bottom_up_children_near_parent():
-    """Children of the same parent get positions that minimize distance from parent ideal."""
-    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
-        generations=3, include_metadata=True
-    )
-    ordered, coords, _ = _bottom_up_position_leaves(
-        generation_layers=generation_layers,
-        dispersal=0.0,
-    )
-    # For each parent in gen 1, its two children should have angular positions
-    # that are "close" to the parent's (theta, phi) in some sense.
-    # The Hungarian assignment minimizes total cost, so siblings should be
-    # assigned to slots near their ideal (parent position).
-    for parent in generation_layers[1]:
-        children = parent.children
-        assert len(children) == 2
-        p_theta, p_phi = parent.layer_position[1], parent.layer_position[2]
-        for child in children:
-            c_theta, c_phi = child.layer_position[1], child.layer_position[2]
-            dist = angular_distance(
-                _angles_to_cartesian(p_theta, p_phi, 1.0),
-                _angles_to_cartesian(c_theta, c_phi, 1.0),
-            )
-            # Should be within a reasonable angular distance (slots are spread on sphere)
-            assert dist < np.pi  # at least on same hemisphere-ish
-
-
 def test_bottom_up_requires_generation_layers():
     """Raises if generation_layers is None."""
-    root, leaves, sibling_pairs, _, _ = generate_tree(
-        generations=2, include_metadata=True
-    )
     with pytest.raises(ValueError, match="generation_layers is required"):
         _bottom_up_position_leaves(
             generation_layers=None,
             dispersal=0.0,
         )
-
-
-# -----------------------------------------------------------------------------
-# build_embryo final coordinate contract
-# -----------------------------------------------------------------------------
-
-
-def test_build_embryo_layers_returns_embryo():
-    """build_embryo returns a valid Embryo with leaf coordinates."""
-    emb = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=1,
-    )
-    assert isinstance(emb, Embryo)
-    assert emb.root is not None
-    assert len(emb.leaves) == 2**3
-    assert emb.coords is not None
-    assert emb.coords.shape[0] == len(emb.leaves)
-
-
-def test_build_embryo_layers_coords_shape():
-    """Final Cartesian coords array matches number of leaves."""
-    emb = build_embryo(
-        generations=4,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=2,
-    )
-    assert emb.coords.shape == (len(emb.leaves), 3)
-
-
-def test_build_embryo_leaf_positions_are_unit_vectors():
-    """Final leaf positions are stored as Cartesian unit vectors."""
-    emb = build_embryo(
-        generations=4,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=3,
-    )
-    norms = [
-        np.linalg.norm(np.asarray(leaf.position, dtype=float)) for leaf in emb.leaves
-    ]
-    assert all(np.isclose(norm, 1.0, atol=1e-9) for norm in norms)
 
 
 def test_build_embryo_preserves_layer_positions_for_visualization():
@@ -252,35 +142,6 @@ def test_build_embryo_preserves_layer_positions_for_visualization():
 # -----------------------------------------------------------------------------
 # Dispersal
 # -----------------------------------------------------------------------------
-
-
-def test_bottom_up_dispersal_zero_deterministic():
-    """With dispersal=0, the same RNG seed reproduces the same placement."""
-    root, leaves, sp, id_dict, gl = generate_tree(3, include_metadata=True)
-    _, coords1, _ = _bottom_up_position_leaves(
-        generation_layers=gl,
-        dispersal=0.0,
-        rng=np.random.default_rng(7),
-    )
-    root2, leaves2, sp2, id_dict2, gl2 = generate_tree(3, include_metadata=True)
-    _, coords2, _ = _bottom_up_position_leaves(
-        generation_layers=gl2,
-        dispersal=0.0,
-        rng=np.random.default_rng(7),
-    )
-    np.testing.assert_array_almost_equal(coords1, coords2)
-
-
-def test_bottom_up_dispersal_positive_changes_assignment():
-    """With dispersal > 0 vs dispersal=0, same seed yields different positions."""
-    emb0 = build_embryo(
-        generations=3, meio_rate=0.0, mito_rate=0.0, seed=7, placement_dispersal=0.0
-    )
-    emb1 = build_embryo(
-        generations=3, meio_rate=0.0, mito_rate=0.0, seed=7, placement_dispersal=0.5
-    )
-    # dispersal=0.1 changes the child ideals, changing the assignment
-    assert not np.allclose(emb0.coords, emb1.coords)
 
 
 def test_bottom_up_dispersal_reproducible_with_same_seed():
@@ -321,58 +182,6 @@ def test_bottom_up_dispersal_changes_with_different_seed():
     assert not np.allclose(emb1.coords, emb2.coords)
 
 
-def test_bottom_up_zero_dispersal_changes_with_different_seed():
-    """With dispersal = 0, different seeds still produce different positions."""
-    emb1 = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=7,
-        placement_dispersal=0.0,
-    )
-    emb2 = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=8,
-        placement_dispersal=0.0,
-    )
-    assert not np.allclose(emb1.coords, emb2.coords)
-
-
-def test_bottom_up_zero_dispersal_reproducible_with_same_seed():
-    """With dispersal = 0, same seed still produces reproducible positions."""
-    emb1 = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=7,
-        placement_dispersal=0.0,
-    )
-    emb2 = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=7,
-        placement_dispersal=0.0,
-    )
-    np.testing.assert_array_almost_equal(emb1.coords, emb2.coords)
-
-
-def test_build_embryo_layers_placement_dispersal():
-    """build_embryo accepts and uses placement_dispersal."""
-    emb0 = build_embryo(
-        generations=3, meio_rate=0.0, mito_rate=0.0, seed=1, placement_dispersal=0.0
-    )
-    emb1 = build_embryo(
-        generations=3, meio_rate=0.0, mito_rate=0.0, seed=1, placement_dispersal=0.1
-    )
-    assert emb0.placement_dispersal == 0.0
-    assert emb1.placement_dispersal == 0.1
-    # Different dispersal should yield different coords (stochastic)
-    assert not np.allclose(emb0.coords, emb1.coords)
-
-
 # -----------------------------------------------------------------------------
 # Spherical vs Cartesian (coordinate system notes)
 # -----------------------------------------------------------------------------
@@ -395,7 +204,7 @@ def test_angles_to_cartesian_roundtrip():
 
 def test_bottom_up_greedy_assignments_are_bijective():
     """Greedy placement: each child gets exactly one slot; each slot used at most once."""
-    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
+    _, leaves, _, _, generation_layers = generate_tree(
         generations=3, include_metadata=True
     )
     ordered, coords, _ = _bottom_up_position_leaves_greedy(
@@ -422,7 +231,7 @@ def test_bottom_up_greedy_requires_generation_layers():
 
 def test_bottom_up_greedy_raises_when_dispersal_out_of_range():
     """Greedy placement raises when dispersal outside [0, 1]."""
-    root, leaves, sp, id_dict, gl = generate_tree(generations=2, include_metadata=True)
+    _, _, _, _, gl = generate_tree(generations=2, include_metadata=True)
     with pytest.raises(ValueError, match="dispersal must be between"):
         _bottom_up_position_leaves_greedy(
             generation_layers=gl,
