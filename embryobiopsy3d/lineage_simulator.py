@@ -16,7 +16,6 @@ import numpy as np
 from numpy import arange, arccos, cos, pi, sin
 from scipy.optimize import linear_sum_assignment
 
-
 # -----------------------------------------------------------------------------
 # Utilities
 # -----------------------------------------------------------------------------
