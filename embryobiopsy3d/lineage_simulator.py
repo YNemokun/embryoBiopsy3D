@@ -6,7 +6,6 @@ annotates aneuploidy, and places leaf cells on a sphere for downstream
 biopsy and visualization workflows.
 """
 
-import random
 import uuid
 from collections import deque
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from typing import Optional
 import numpy as np
 from numpy import arange, arccos, cos, pi, sin
 from scipy.optimize import linear_sum_assignment
+
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -49,7 +49,7 @@ def angular_distance(point_a, point_b) -> float:
 
 @dataclass
 class Embryo:
-    """Embryo class for the simulated embryo state."""
+    """Container embryo class for the simulated embryo state."""
 
     root: "Cell"
     leaves: list["Cell"]
@@ -125,7 +125,6 @@ class Cell:
             f"gen={self.generation}, "
             f"aneuploid={self.is_aneuploid}, "
             f"dead = {self.is_dead},"
-            f"children={self.children}, "
             f"pos={self.position}, "
             f"layer_pos={self.layer_position})"
         )
@@ -583,13 +582,19 @@ def _assign_hungarian_slots(next_layer, child_ideal_angles, angles, radius):
         ]
 
 
-def _assign_greedy_slots(next_layer, child_ideal_angles, angles, radius, randomizer):
+def _assign_greedy_slots(
+    next_layer,
+    child_ideal_angles,
+    angles,
+    radius,
+    rng: Optional[np.random.Generator] = None,
+):
     """Assign each child to the nearest, currently unoccupied, and ideal slot."""
     if len(next_layer) != len(angles):
         raise ValueError("Mismatch between child count and available angle slots.")
 
-    child_order = list(range(len(next_layer)))
-    randomizer.shuffle(child_order)
+    rng = _ensure_rng(rng)
+    child_order = rng.permutation(len(next_layer))
 
     # reuse the cost matrix instead of recalculating it for each child
     cost_matrix = build_cost_matrix(child_ideal_angles, angles)
@@ -611,15 +616,17 @@ def _assign_greedy_slots(next_layer, child_ideal_angles, angles, radius, randomi
 
 
 def _run_bottom_up_positioning(
-    generation_layers, dispersal, *, placement_strategy, rng=None
+    generation_layers,
+    dispersal,
+    *,
+    placement_strategy,
+    rng: Optional[np.random.Generator] = None,
 ):
     """Shared implementation for layered bottom-up leaf placement."""
     _validate_positioning_inputs(generation_layers, dispersal)
     _clear_generation_positions(generation_layers)
 
-    randomizer = None
     rng = _ensure_rng(rng)
-    randomizer = random.Random(int(rng.integers(0, 2**31 - 1)))
 
     sibling_pairs = []
     total_layers = len(generation_layers)
@@ -653,7 +660,7 @@ def _run_bottom_up_positioning(
                 child_ideal_angles,
                 angles,
                 radius,
-                randomizer,
+                rng=rng,
             )
         else:
             raise ValueError(

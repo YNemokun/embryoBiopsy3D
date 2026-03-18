@@ -1,7 +1,7 @@
 # This file contains the rebiopsy simulation
 
-from biopsy import Sampling
-from lineage_simulator import (
+from .biopsy import Sampling
+from .lineage_simulator import (
     build_embryo,
     generate_tree,
     apply_error_rates,

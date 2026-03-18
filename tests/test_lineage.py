@@ -2,7 +2,8 @@
 import math
 import numpy as np
 
-from lineage_simulator import (
+from embryobiopsy3d.biopsy import Sampling
+from embryobiopsy3d.lineage_simulator import (
     Cell,
     Embryo,
     cell_division,
@@ -12,7 +13,6 @@ from lineage_simulator import (
     coordinates_generate,
     build_embryo,
 )
-from biopsy import Sampling
 
 
 def unit(v):

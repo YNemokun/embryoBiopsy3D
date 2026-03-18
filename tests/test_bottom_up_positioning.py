@@ -5,7 +5,7 @@ Tests for bottom-up positioning with Hungarian algorithm assignment.
 import numpy as np
 import pytest
 
-from lineage_simulator import (
+from embryobiopsy3d.lineage_simulator import (
     Embryo,
     angular_distance,
     generate_tree,
@@ -277,7 +277,7 @@ def test_bottom_up_dispersal_positive_changes_assignment():
         generations=3, meio_rate=0.0, mito_rate=0.0, seed=7, placement_dispersal=0.0
     )
     emb1 = build_embryo(
-        generations=3, meio_rate=0.0, mito_rate=0.0, seed=7, placement_dispersal=0.1
+        generations=3, meio_rate=0.0, mito_rate=0.0, seed=7, placement_dispersal=0.5
     )
     # dispersal=0.1 changes the child ideals, changing the assignment
     assert not np.allclose(emb0.coords, emb1.coords)

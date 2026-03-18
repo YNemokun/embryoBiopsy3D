@@ -2,8 +2,9 @@
 import math
 import numpy as np
 import pytest
-from lineage_simulator import Cell
-from biopsy import Sampling
+
+from embryobiopsy3d.biopsy import Sampling
+from embryobiopsy3d.lineage_simulator import Cell
 
 
 def unit(v):
