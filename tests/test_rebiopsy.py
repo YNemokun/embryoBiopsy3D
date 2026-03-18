@@ -1,14 +1,9 @@
 import math
-
 import numpy as np
 
-from embryo_biopsy_3d import rebiopsy
-from embryo_biopsy_3d.biopsy import Sampling
-from embryo_biopsy_3d.lineage_simulator import (
-    Cell,
-    angular_distance,
-    build_embryo as ls_build_embryo,
-)
+import rebiopsy
+from lineage_simulator import Cell, angular_distance, build_embryo as ls_build_embryo
+from biopsy import Sampling
 
 
 def make_cell(pos, is_aneuploid=False):

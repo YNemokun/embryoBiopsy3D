@@ -1,11 +1,9 @@
 # sampling tests for the basic cases
 import math
-
 import numpy as np
 import pytest
-
-from embryo_biopsy_3d.biopsy import Sampling
-from embryo_biopsy_3d.lineage_simulator import Cell
+from lineage_simulator import Cell
+from biopsy import Sampling
 
 
 def unit(v):
