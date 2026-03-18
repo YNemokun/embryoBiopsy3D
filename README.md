@@ -7,7 +7,7 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -e ".[test]"
 ```
 
 ## Usage
@@ -16,10 +16,10 @@ pip install -r requirements.txt
 
 ## Tests
 
-With the project root on `PYTHONPATH` (via `pyproject.toml`), run:
+With the package installed in editable mode, run:
 
 ```bash
-pytest test/
+pytest tests/
 ```
 
 ## Dependencies
