@@ -38,96 +38,12 @@ def deg(rad):
     return rad * 180.0 / math.pi
 
 
-def test_returns_all_leaves():
+def test_dist_on_sphere_orthogonal_is_pi_over_two():
     leaves = make_simple_leaves()
     s = Sampling(leaves)
-    center = leaves[0]
-
-    n_cells = len(leaves)
-    res = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.2)
-
-    # We expect it to return exactly n_cells 'selected' (including center)
-    assert len(res["selected"]) == n_cells
-    assert center in res["selected"]
-
-
-def test_threshold_compliance_basic():
-    leaves = make_simple_leaves()
-    s = Sampling(leaves)
-    center = leaves[0]
-    n_cells = 5
-    res = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.25)
-    thr = res["threshold"]  # radians
-    # All selected must be >= threshold from center, unless relaxation happened.
-    # If relaxed_by>0, we allow a small epsilon below threshold.
-    eps = 1e-12
-    for c in res["selected"]:
-        if c is center:
-            continue
-        d = s.dist_on_sphere(np.asarray(center.position), np.asarray(c.position))
-        if res["relaxed_by"] == 0:
-            assert d + eps >= thr, f"distance {d:.5f} < threshold {thr:.5f}"
-        else:
-            # Relaxation means threshold was slid left; just check non-negativity.
-            assert d >= 0.0
-
-
-def test_relaxation_triggers_when_needed():
-    leaves = make_simple_leaves()
-    s = Sampling(leaves)
-    center = leaves[0]
-
-    # Set a high dispersal so few cells qualify; relaxation should kick in.
-    n_cells = 5
-    res = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.95)
-    assert res["relaxed_by"] >= 0
-    # Still returns n_cells total (center + others, after relaxation/window shift)
-    assert len(res["selected"]) == n_cells
-    assert center in res["selected"]
-
-
-def test_monotone_with_dispersal():
-    """
-    As dispersal increases, the initial threshold should (weakly) increase,
-    because it's computed as dispersal * max_distance_from_center.
-    """
-    leaves = make_simple_leaves()
-    s = Sampling(leaves)
-    center = leaves[0]
-    n_cells = 5
-
-    res1 = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.10)
-    res2 = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.50)
-    assert res2["threshold"] >= res1["threshold"] - 1e-12
-
-
-def test_selected_are_farthest_when_dispersal_high():
-    """
-    With very high dispersal, the slice should start near the end (farthest cells).
-    We check that selected cells are among the largest distances from center.
-    """
-    leaves = make_simple_leaves()
-    s = Sampling(leaves)
-    center = leaves[0]
-    n_cells = 5
-
-    res = s.biopsy_with_distance(n_cells=n_cells, center_leaf=center, distance=0.9)
-    # Compute all distances (excluding center)
-    dists = []
-    for c in leaves:
-        if c is center:
-            continue
-        dists.append(s.dist_on_sphere(center.position, c.position))
-    dists_sorted = sorted(dists, reverse=True)
-
-    # validate via a distance threshold
-    cutoff = dists_sorted[n_cells - 2]  # (n_cells-1) selected
-    eps = 1e-12
-    for c in res["selected"]:
-        if c is center:
-            continue
-        d = s.dist_on_sphere(center.position, c.position)
-        assert d + eps >= cutoff
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([0.0, 1.0, 0.0])
+    assert s.dist_on_sphere(a, b) == pytest.approx(math.pi / 2, abs=1e-12)
 
 
 def test_current_biopsy_includes_center_and_size():

@@ -7,7 +7,6 @@ import pytest
 
 from embryobiopsy3d.lineage_simulator import (
     Embryo,
-    angular_distance,
     generate_tree,
     build_embryo,
     coordinates_generate_radians,
@@ -16,6 +15,15 @@ from embryobiopsy3d.lineage_simulator import (
     _bottom_up_position_leaves_greedy,
     _angles_to_cartesian,
 )
+
+
+def _angular_distance_xyz(point_a, point_b):
+    """Reference: same formula as `Sampling.dist_on_sphere` (no module import)."""
+    a = np.asarray(point_a, dtype=float)
+    b = np.asarray(point_b, dtype=float)
+    a = a / np.linalg.norm(a)
+    b = b / np.linalg.norm(b)
+    return float(np.arccos(np.clip(a @ b, -1.0, 1.0)))
 
 
 def test_build_cost_matrix_shape():
@@ -33,7 +41,7 @@ def test_build_cost_matrix_matches_cartesian_angular_distance():
     """Cost matrix entries match Cartesian angular distance."""
     th1, ph1 = 0.5, 1.0
     th2, ph2 = 1.5, 0.8
-    expected = angular_distance(
+    expected = _angular_distance_xyz(
         _angles_to_cartesian(th1, ph1, 1.0),
         _angles_to_cartesian(th2, ph2, 1.0),
     )

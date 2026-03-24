@@ -5,8 +5,9 @@ Biopsy / sampling helpers for embryo surfaces.
 from typing import Optional
 
 import numpy as np
+from numpy.typing import NDArray
 
-from .lineage_simulator import _ensure_rng, angular_distance
+from .lineage_simulator import _ensure_rng
 
 
 class Sampling:
@@ -25,9 +26,13 @@ class Sampling:
         self._index_map = {cell: idx for idx, cell in enumerate(self.leaves)}
         self._sorted_cache = {}
 
-    # calculate distance between two coordinated on the sphere
-    def dist_on_sphere(self, point_a, point_b):
-        return angular_distance(point_a, point_b)
+    def dist_on_sphere(
+        self, point_a: NDArray[np.float64], point_b: NDArray[np.float64]
+    ) -> float:
+        """Angular distance between two 3D points on the unit sphere."""
+        a = point_a / np.linalg.norm(point_a)
+        b = point_b / np.linalg.norm(point_b)
+        return float(np.arccos(np.clip(a @ b, -1.0, 1.0)))
 
     @staticmethod
     def _pairwise_angular(coords: np.ndarray) -> np.ndarray:
@@ -57,91 +62,6 @@ class Sampling:
         selected_cells = [self.leaves[i] for i in order[:n_cells]]
 
         return {"center_leaf": center_leaf, "selected": selected_cells}
-
-    # randomly pick 5 cells slightly apart from the center cell
-    def biopsy_with_distance(self, n_cells=5, center_leaf=None, distance=0.2):
-        """
-        Distance fraction: percentage of the farthest possible distance from the center.
-        The returned 'selected' list includes the center cell.
-        """
-        if center_leaf is None:
-            center_leaf = self.rng.choice(self.leaves)
-
-        total_leaves = len(self.leaves)
-        if n_cells <= 0:
-            return {
-                "center_leaf": center_leaf,
-                "selected": [],
-                "threshold": 0.0,
-                "relaxed_by": 0,
-            }
-
-        if n_cells >= total_leaves:
-            selected = list(self.leaves)
-            return {
-                "center_leaf": center_leaf,
-                "selected": selected,
-                "threshold": 0.0,
-                "relaxed_by": max(0, n_cells - total_leaves),
-            }
-
-        center = np.asarray(center_leaf.position)
-
-        # calculate other cell's distance to the center leaf
-        pairs = []
-        for cell in self.leaves:
-            if cell is center_leaf:
-                continue
-            point = np.asarray(cell.position)
-            dist = self.dist_on_sphere(center, point)
-            pairs.append((dist, cell))
-
-        # sort by distance to center leaf
-        pairs.sort(key=lambda t: t[0])
-        # establish the threshold (inclusive)
-        threshold = pairs[-1][0] * distance
-
-        # number of additional cells needed beyond the center
-        n_needed = max(0, n_cells - 1)
-
-        if n_needed == 0:
-            return {
-                "center_leaf": center_leaf,
-                "selected": [center_leaf],
-                "threshold": threshold,
-                "relaxed_by": 0,
-            }
-
-        # select n_needed cells only if they are just above the threshold
-        start_index = None
-        for i, (d, _) in enumerate(pairs):
-            if d >= threshold:
-                start_index = i
-                break
-
-        if start_index is None:
-            start_index = len(pairs)
-
-        select_len = len(pairs) - start_index
-
-        # if there aren't enough cells to satisfy this boundary
-        # relax the threshold
-        if select_len >= n_needed:
-            relaxed_by = 0
-        else:
-            relaxed_by = n_needed - select_len
-            start_index = max(0, start_index - relaxed_by)
-
-        selected_cells = [center_leaf] + [
-            cell for _, cell in pairs[start_index : start_index + n_needed]
-        ]
-
-        return {
-            "center_leaf": center_leaf,
-            "selected": selected_cells,
-            "threshold": threshold,
-            "relaxed_by": relaxed_by,
-        }
 
     def categorize_biopsy(self, biopsy_leaves):
         """

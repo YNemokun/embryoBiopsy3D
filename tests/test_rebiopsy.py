@@ -4,9 +4,17 @@ import numpy as np
 from embryobiopsy3d import rebiopsy
 from embryobiopsy3d.lineage_simulator import (
     Cell,
-    angular_distance,
     build_embryo as ls_build_embryo,
 )
+
+
+def _angular_distance_xyz(point_a, point_b):
+    """Reference: same formula as `Sampling.dist_on_sphere`."""
+    a = np.asarray(point_a, dtype=float)
+    b = np.asarray(point_b, dtype=float)
+    a = a / np.linalg.norm(a)
+    b = b / np.linalg.norm(b)
+    return float(np.arccos(np.clip(a @ b, -1.0, 1.0)))
 
 
 def make_cell(pos, is_aneuploid=False):
@@ -63,7 +71,7 @@ class FakeSampling:
         self.rng = rng or np.random.default_rng(0)
 
     def dist_on_sphere(self, a, b):
-        return angular_distance(a, b)
+        return _angular_distance_xyz(a, b)
 
     def current_biopsy(self, n_cells=5, center_leaf=None):
         center_leaf = center_leaf or self.leaves[0]
@@ -163,7 +171,7 @@ def test_actual_distance_matches_center_distance():
     )
     center = np.asarray(meta["standard_center"].position)
     second = np.asarray(meta["second_center"].position)
-    expected = angular_distance(center, second)
+    expected = _angular_distance_xyz(center, second)
     assert math.isclose(meta["actual_distance"], expected, rel_tol=1e-9, abs_tol=1e-9)
 
 
@@ -185,5 +193,7 @@ def test_relax_params_allow_forced_fallback(monkeypatch):
     )
     center = np.asarray(meta["standard_center"].position)
     remaining = [leaf for leaf in leaves if leaf is not meta["standard_center"]]
-    dists = [angular_distance(center, np.asarray(leaf.position)) for leaf in remaining]
+    dists = [
+        _angular_distance_xyz(center, np.asarray(leaf.position)) for leaf in remaining
+    ]
     assert math.isclose(meta["actual_distance"], max(dists), rel_tol=1e-9, abs_tol=1e-9)

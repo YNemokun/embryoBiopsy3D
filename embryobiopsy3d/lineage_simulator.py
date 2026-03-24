@@ -21,7 +21,9 @@ from scipy.optimize import linear_sum_assignment
 # -----------------------------------------------------------------------------
 
 
-def _ensure_rng(rng: Optional[np.random.Generator] = None, seed: Optional[int] = None):
+def _ensure_rng(
+    rng: Optional[np.random.Generator] = None, seed: Optional[int] = None
+) -> np.random.Generator:
     """Return a numpy Generator, optionally seeded."""
     if rng is not None:
         return rng
@@ -29,17 +31,6 @@ def _ensure_rng(rng: Optional[np.random.Generator] = None, seed: Optional[int] =
     if seed is None:
         return np.random.default_rng()
     return np.random.default_rng(seed)
-
-
-def angular_distance(point_a, point_b) -> float:
-    """Angular distance between two 3D points on a sphere."""
-    a = np.asarray(point_a, dtype=float)
-    b = np.asarray(point_b, dtype=float)
-    # Normalize vectors to unit length before taking dot products.
-    a = a / np.linalg.norm(a)
-    b = b / np.linalg.norm(b)
-    # Clip against floating-point drift before arccos.
-    return float(np.arccos(np.clip(a @ b, -1.0, 1.0)))
 
 
 # -----------------------------------------------------------------------------
