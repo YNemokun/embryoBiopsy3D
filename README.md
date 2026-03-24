@@ -10,6 +10,8 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[test]"
 ```
 
+Same as: `make install` (from the repo root).
+
 ## Usage
 
 **TO BE IMPLEMENTED**
@@ -22,6 +24,8 @@ With the package installed in editable mode, run:
 pytest tests/
 ```
 
+Same as `make test`
+
 ## Dependencies
 
 - numpy
@@ -32,3 +36,11 @@ pytest tests/
 - **lineage_simulator.py** — Builds a binary lineage tree, generates/annotates aneuploidy, and places leaf cells on a sphere
 - **biopsy.py** — Sampling helpers for selecting cell clusters on the embryo surface
 - **rebiopsy.py** — Rebiopsy simulation
+
+## Terminology (simulation)
+
+- **Mosaic**: any sample that contains both euploid and aneuploid cells is labeled mosaic (no percentage threshold in the current assignment logic). Number of aneuploidy cells for each biopsy are included in the trial data.
+- **Dispersal**: controls how far daughter cells move from the parent-centered ideal after division (placement metric).
+- **Distance**: minimum separation between first and second biopsy centers (sampling metric).
+
+Trials can reuse one tree structure with flags reset between trials; independence depends on that reset being correct.
