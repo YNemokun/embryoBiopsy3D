@@ -1,8 +1,9 @@
 """
-Tests for lineage_simulator: Embryo API, _lineage_distance, Cell.set_aneuploid,
+Tests for lineage_simulator: Embryo API, lineage distance helper, Cell.set_aneuploid,
 and build_embryo / _position_leaves validation.
 """
 
+import numpy as np
 import pytest
 
 from embryobiopsy3d.lineage_simulator import (
@@ -10,9 +11,31 @@ from embryobiopsy3d.lineage_simulator import (
     Embryo,
     generate_tree,
     build_embryo,
-    _lineage_distance,
-    coordinates_generate,
+    coordinates_generate_radians,
 )
+
+
+def _lineage_distance(cell_a, cell_b) -> int:
+    """Tree distance between two cells using parent pointers (test helper)."""
+    if cell_a is cell_b:
+        return 0
+    a, b = cell_a, cell_b
+    dist = 0
+    while a.generation > b.generation:
+        a = a.parent
+        dist += 1
+    while b.generation > a.generation:
+        b = b.parent
+        dist += 1
+    while a is not b:
+        if a is None or b is None:
+            raise ValueError("Cells do not share a common ancestor.")
+        a = a.parent
+        b = b.parent
+        dist += 2
+    if a is None:
+        raise ValueError("Cells do not share a common ancestor.")
+    return dist
 
 
 # -----------------------------------------------------------------------------
@@ -210,7 +233,7 @@ def test_embryo_set_aneuploid_by_generation_index():
 
 
 # -----------------------------------------------------------------------------
-# _lineage_distance
+# Lineage distance (test-local helper)
 # -----------------------------------------------------------------------------
 
 
@@ -315,7 +338,12 @@ def test_build_embryo_raises_when_missing_required_params():
 def test_build_embryo_raises_when_coords_length_mismatch():
     """build_embryo raises when coords length does not match leaves."""
     root, leaves, sibling_pairs = generate_tree(generations=3)
-    coords = coordinates_generate(4)  # wrong size: 8 leaves, 4 coords
+    a = coordinates_generate_radians(4)
+    coords = np.c_[
+        np.cos(a[:, 0]) * np.sin(a[:, 1]),
+        np.sin(a[:, 0]) * np.sin(a[:, 1]),
+        np.cos(a[:, 1]),
+    ]  # wrong size: 8 leaves, 4 coords
     with pytest.raises(ValueError, match="coords length must match"):
         build_embryo(
             root=root,

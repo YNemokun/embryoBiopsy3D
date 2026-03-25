@@ -40,19 +40,23 @@ def _ensure_rng(
 
 @dataclass
 class Embryo:
-    """Container embryo class for the simulated embryo state."""
+    """Container embryo class (data structure) for the simulated embryo state."""
 
     root: "Cell"
     leaves: list["Cell"]
-    sibling_pairs: list[tuple["Cell", "Cell"]]
-    coords: Optional[np.ndarray] = None
+    sibling_pairs: list[tuple["Cell", "Cell"]]  # lineage sibling pairs of leaves
+    coords: Optional[np.ndarray] = (
+        None  # Cartesian unit vector positions, for plotting and all latter uses
+    )
     placement_dispersal: Optional[float] = None
     generation_rng: Optional[np.random.Generator] = None
-    mutated_cells: Optional[list["Cell"]] = None
-    id_dict: Optional[dict[str, "Cell"]] = None
-    generation_layers: Optional[list[list["Cell"]]] = None
+    mutated_cells: Optional[list["Cell"]] = (
+        None  # aneuploid cells that need to be reset to euploid
+    )
+    id_dict: Optional[dict[str, "Cell"]] = None  # fast lookup by UUID
+    generation_layers: Optional[list[list["Cell"]]] = None  # index leaves by generation
 
-    def get_node_by_id(self, node_id):
+    def get_node_by_id(self, node_id: str) -> "Cell":
         """Return the node matching the given id."""
         if not self.id_dict:
             raise ValueError("Embryo id_dict is not initialized.")
@@ -60,17 +64,17 @@ class Embryo:
 
     def set_aneuploid_by_id(
         self,
-        node_id,
+        node_id: str,
         is_aneuploid: bool = True,
         include_subtree: bool = True,
-    ):
+    ) -> list["Cell"]:
         """Set aneuploid status for a node id, optionally including its subtree."""
         node = self.get_node_by_id(node_id)
         if node is None:
             raise ValueError(f"Node id not found: {node_id!r}")
         return node.set_aneuploid(is_aneuploid, include_subtree)
 
-    def get_node_by_generation_index(self, generation, index):
+    def get_node_by_generation_index(self, generation: int, index: int) -> "Cell":
         """Return the node at generation_layers[generation][index]."""
         if not self.generation_layers:
             raise ValueError("Embryo generation_layers is not initialized.")
@@ -83,11 +87,11 @@ class Embryo:
 
     def set_aneuploid_by_generation_index(
         self,
-        generation,
-        index,
+        generation: int,
+        index: int,
         is_aneuploid: bool = True,
         include_subtree: bool = True,
-    ):
+    ) -> list["Cell"]:
         """Set aneuploid status for a (generation, index) node, optionally its subtree."""
         node = self.get_node_by_generation_index(generation, index)
         return node.set_aneuploid(is_aneuploid, include_subtree)
@@ -107,7 +111,7 @@ class Cell:
         self.layer_position = (
             None  # Radian, for calculating cell placement during construction
         )
-        self.is_dead = False  # For early cell deaths
+        self.is_dead = False  # For early cell deaths (To be implemented)
         self.is_aneuploid = False  # default to euploid
 
     def __repr__(self):  # for debug, changing the print behavior
@@ -120,7 +124,9 @@ class Cell:
             f"layer_pos={self.layer_position})"
         )
 
-    def set_aneuploid(self, is_aneuploid: bool = True, include_subtree: bool = True):
+    def set_aneuploid(
+        self, is_aneuploid: bool = True, include_subtree: bool = True
+    ) -> list["Cell"]:
         """Set aneuploid status on this cell (optionally its subtree)."""
         affected = []
         if include_subtree:
@@ -136,6 +142,7 @@ class Cell:
             # Just update the current cell
             self.is_aneuploid = is_aneuploid
             affected.append(self)
+        # return the list of mutated cells
         return affected
 
 
@@ -144,7 +151,9 @@ class Cell:
 # -----------------------------------------------------------------------------
 
 
-def build_id_dict_and_layers(root):
+def build_id_dict_and_layers(
+    root: "Cell",
+) -> tuple[dict[str, "Cell"], list[list["Cell"]]]:
     """Return (id_dict, generation_layers) for the given root (BFS)."""
     # Empty root means no nodes and no generation buckets.
     if root is None:
@@ -154,6 +163,7 @@ def build_id_dict_and_layers(root):
     id_dict = {}
     generation_layers = []
     queue = deque([root])
+    # breadth-first search through the tree
     while queue:
         node = queue.popleft()
         id_dict[node.id] = node
@@ -168,13 +178,13 @@ def build_id_dict_and_layers(root):
 
 
 def _initialize_generation_metadata(
-    root,
-    generations,
+    root: "Cell",
+    generations: int,
     *,
-    id_dict=None,
-    generation_layers=None,
-):
-    """Return id- and generation-indexed containers for the requested number of generations."""
+    id_dict: Optional[dict[str, "Cell"]] = None,
+    generation_layers: Optional[list[list["Cell"]]] = None,
+) -> tuple[dict[str, "Cell"], list[list["Cell"]]]:
+    """Allocate id- and generation-indexed containers for the requested number of generations."""
     if id_dict is None:
         id_dict = {root.id: root}
     if generation_layers is None:
@@ -188,13 +198,21 @@ def _initialize_generation_metadata(
 
 
 def cell_division(
-    root,
-    generations,
-    id_dict=None,
-    generation_layers=None,
+    root: "Cell",
+    generations: int,
+    id_dict: Optional[dict[str, "Cell"]] = None,
+    generation_layers: Optional[list[list["Cell"]]] = None,
     *,
     include_metadata: bool = False,
-):
+) -> tuple[
+    tuple[
+        "Cell",
+        list["Cell"],
+        list[tuple["Cell", "Cell"]],
+        dict[str, "Cell"],
+        list[list["Cell"]],
+    ]
+]:
     """Generate cell divisions without applying aneuploidy.
 
     If include_metadata is True, returns id_dict and generation_layers as well.
@@ -205,7 +223,7 @@ def cell_division(
         id_dict=id_dict,
         generation_layers=generation_layers,
     )
-    if generations <= 0:
+    if generations <= 0:  # no cell division
         if include_metadata:
             return root, [], [], id_dict, generation_layers
         return root, [], []
@@ -218,12 +236,6 @@ def cell_division(
     for generation_index in range(generations):
         next_generation = []
         for parent in current_generation:
-            # TODO Later: Cell death
-            # if parent.is_dead:
-            #     # Dead leaves are carried forward unchanged.
-            #     next_generation.append(parent)
-            #     continue
-
             # Normal leaf division
             child1 = Cell(parent=parent, generation=parent.generation + 1)
             child2 = Cell(parent=parent, generation=parent.generation + 1)
@@ -251,9 +263,12 @@ def cell_division(
 
 
 def apply_error_rates(
-    root, meio_rate, mito_rate, rng: Optional[np.random.Generator] = None
-):
-    """Assign meiotic/mitotic errors on an existing tree structure (BFS)."""
+    root: "Cell",
+    meio_rate: float,
+    mito_rate: float,
+    rng: Optional[np.random.Generator] = None,
+) -> list["Cell"]:
+    """Randomly assign meiotic/mitotic errors on an existing tree structure (BFS)."""
     rng = _ensure_rng(rng)
     # for easy reset
     mutated_cells = []
@@ -264,6 +279,7 @@ def apply_error_rates(
 
     # Traverse all nodes to propagate inherited and new mitotic errors.
     queue = deque([root])
+    # breadth-first search through the tree
     while queue:
         cell = queue.popleft()
         # skip if this is a leaf node
@@ -289,7 +305,7 @@ def apply_error_rates(
     return mutated_cells
 
 
-def reset_flags(mutated_cells):
+def reset_flags(mutated_cells: list["Cell"]) -> None:
     """Reset aneuploid flags on the provided cells."""
     if not mutated_cells:
         return None
@@ -299,7 +315,17 @@ def reset_flags(mutated_cells):
     return None
 
 
-def generate_tree(generations, *, include_metadata: bool = False):
+def generate_tree(
+    generations: int, *, include_metadata: bool = False
+) -> tuple[
+    tuple[
+        "Cell",
+        list["Cell"],
+        list[tuple["Cell", "Cell"]],
+        dict[str, "Cell"],
+        list[list["Cell"]],
+    ]
+]:
     """Generate a binary lineage tree for a fixed number of generations.
 
     If include_metadata is True, returns id_dict and generation_layers as well.
@@ -309,6 +335,7 @@ def generate_tree(generations, *, include_metadata: bool = False):
     leaves = []
     sibling_pairs = []
     id_dict, generation_layers = _initialize_generation_metadata(root, generations)
+    # simulate the cell division
     if generations > 0:
         root, leaves, sibling_pairs, id_dict, generation_layers = cell_division(
             root,
@@ -328,23 +355,7 @@ def generate_tree(generations, *, include_metadata: bool = False):
 # -----------------------------------------------------------------------------
 
 
-def coordinates_generate(n):
-    """Generate near-uniform Cartesian coordinates on the unit sphere."""
-    if n <= 0:
-        return np.zeros((0, 3), dtype=float)
-    # Golden-angle spacing for near-uniform points on a sphere
-    golden_ratio = (1 + 5**0.5) / 2
-    i = arange(n)
-    theta = 2 * pi * i / golden_ratio
-    phi = arccos(1 - 2 * (i + 0.5) / n)
-    # From spherical coordinates to unit vectors.
-    x = cos(theta) * sin(phi)
-    y = sin(theta) * sin(phi)
-    z = cos(phi)
-    return np.c_[x, y, z]
-
-
-def coordinates_generate_radians(n):
+def coordinates_generate_radians(n: int) -> np.ndarray:
     """Generate near-uniform spherical coordinates as (theta, phi) radians."""
     if n <= 0:
         return np.zeros((0, 2), dtype=float)
@@ -355,7 +366,7 @@ def coordinates_generate_radians(n):
     return np.c_[theta, phi]
 
 
-def _angles_to_cartesian(theta, phi, radius):
+def _angles_to_cartesian(theta: float, phi: float, radius: float) -> np.ndarray:
     """Convert spherical (theta, phi) to cartesian (x, y, z) at given radius."""
     x = radius * cos(theta) * sin(phi)
     y = radius * sin(theta) * sin(phi)
@@ -363,55 +374,17 @@ def _angles_to_cartesian(theta, phi, radius):
     return np.asarray([x, y, z], dtype=float)
 
 
-def _cartesian_to_angles(x, y, z):
-    """Convert cartesian (x,y,z) to spherical (theta, phi) on unit sphere. Returns (theta, phi)."""
-    r = np.sqrt(x * x + y * y + z * z)
-    if r <= 0:
-        return 0.0, 0.0
-    phi = float(np.arccos(np.clip(z / r, -1.0, 1.0)))
-    theta = float(np.arctan2(y, x))
-    if theta < 0:
-        theta += 2 * pi
-    return theta, phi
-
-
 # -----------------------------------------------------------------------------
 # Lineage ordering and placement helpers
 # -----------------------------------------------------------------------------
 
 
-def _lineage_distance(cell_a, cell_b) -> int:
-    """Tree distance between two cells using parent pointers."""
-    if cell_a is cell_b:
-        return 0
-    a, b = cell_a, cell_b
-    # number of edges needed to travel from a to b
-    dist = 0
-    # Bring both nodes to the same generation depth.
-    while a.generation > b.generation:
-        a = a.parent
-        dist += 1
-    while b.generation > a.generation:
-        b = b.parent
-        dist += 1
-    # Then climb together until the pointers meet.
-    while a is not b:
-        if a is None or b is None:
-            raise ValueError("Cells do not share a common ancestor.")
-        a = a.parent
-        b = b.parent
-        dist += 2
-    if a is None:
-        raise ValueError("Cells do not share a common ancestor.")
-    return dist
-
-
-def _wrap_theta(theta):
+def _wrap_theta(theta: float) -> float:
     """Wrap azimuth  (x-axis) to [0, 2pi)."""
     return float(theta % (2 * pi))
 
 
-def _reflect_phi(phi):
+def _reflect_phi(phi: float) -> float:
     """Reflect polar angle (z-axis) into [0, pi] while preserving continuity."""
     value = float(phi)
     two_pi = 2.0 * float(pi)
@@ -422,7 +395,9 @@ def _reflect_phi(phi):
     return value
 
 
-def _perturb_angles_from_parent(theta, phi, alpha, beta):
+def _perturb_angles_from_parent(
+    theta: float, phi: float, alpha: float, beta: float
+) -> np.ndarray:
     """Return a child ideal angle from parent by angle-space perturbation."""
     # Keep finite dtheta near poles where longitude is numerically unstable.
     sin_phi = float(np.sin(phi))

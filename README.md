@@ -12,9 +12,26 @@ pip install -e ".[test]"
 
 Same as: `make install` (from the repo root).
 
-## Usage
+## Primary API
 
-**TO BE IMPLEMENTED**
+Typical workflows build a lineage tree, place cells on the sphere, then run biopsy / rebiopsy logic. The functions below are the usual entry points (import from the submodules shown).
+
+**Lineage and geometry** (`embryobiopsy3d.lineage_simulator`)
+
+- **`generate_tree`** — Build a binary division tree to a fixed number of generations (structure only; positions not set until placement).
+- **`build_embryo`** — Construct an **`Embryo`**: optional tree generation, meiotic/mitotic error assignment, and spherical placement of leaves (or supply fixed coordinates).
+- **`apply_error_rates`** / **`reset_flags`** — Draw aneuploidy on an existing tree and clear flags between repeated trials (used by rebiopsy batch helpers).
+
+**Biopsy sampling** (`embryobiopsy3d.biopsy`)
+
+- **`Sampling`** — Pick spatial clusters of cells on the sphere and **categorize** a sample (euploid / mosaic / aneuploid).
+
+**Rebiopsy simulation** (`embryobiopsy3d.rebiopsy`)
+
+- **`rebiopsy_single_embryo`** — Two biopsies on one embryo at a target angular separation; returns concordance and category metadata (used in notebooks and one-off analyses).
+- **`rebiopsy_at_error_rate`** — Run many trials with fixed meiotic/mitotic rates and shared or cached geometry; returns a list of per-trial result dicts.
+- **`simulate_experiment`** — Higher-level sweep over dispersal, rebiopsy distance, and sampled error rates (large batch summaries).
+
 
 ## Tests
 

@@ -4,7 +4,7 @@ from embryobiopsy3d.lineage_simulator import (
     Embryo,
     apply_error_rates,
     build_embryo,
-    coordinates_generate,
+    coordinates_generate_radians,
     generate_tree,
     reset_flags,
 )
@@ -19,6 +19,19 @@ def _unit_vectors(points):
 
 def _rounded_point_set(points, decimals=8):
     return {tuple(np.round(np.asarray(p, float), decimals)) for p in points}
+
+
+def _fibonacci_unit_sphere_cartesian(n: int) -> np.ndarray:
+    """Unit vectors for the Fibonacci sphere lattice (from coordinates_generate_radians)."""
+    angles = coordinates_generate_radians(n)
+    if n <= 0:
+        return np.zeros((0, 3), dtype=float)
+    theta, phi = angles[:, 0], angles[:, 1]
+    return np.c_[
+        np.cos(theta) * np.sin(phi),
+        np.sin(theta) * np.sin(phi),
+        np.cos(phi),
+    ]
 
 
 def test_generate_tree_sizes():
@@ -54,7 +67,7 @@ def test_apply_error_rates_reproducible_with_seed():
 
 def test_coordinates_on_unit_sphere():
     for n in (8, 32, 128):
-        points = coordinates_generate(n)
+        points = _fibonacci_unit_sphere_cartesian(n)
         radii = np.sqrt((points**2).sum(axis=1))
         assert np.allclose(radii, 1.0, atol=1e-9)
 
@@ -81,7 +94,7 @@ def test_build_embryo_respects_supplied_coords():
 
 def test_build_embryo_packs_state_and_backfills_metadata():
     root, leaves, siblings = generate_tree(3)
-    coords = coordinates_generate(len(leaves))
+    coords = _fibonacci_unit_sphere_cartesian(len(leaves))
 
     emb = build_embryo(root=root, leaves=leaves, sibling_pairs=siblings, coords=coords)
 

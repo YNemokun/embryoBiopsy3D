@@ -30,6 +30,7 @@ class Sampling:
         self, point_a: NDArray[np.float64], point_b: NDArray[np.float64]
     ) -> float:
         """Angular distance between two 3D points on the unit sphere."""
+        # normalize the points to unit length
         a = point_a / np.linalg.norm(point_a)
         b = point_b / np.linalg.norm(point_b)
         return float(np.arccos(np.clip(a @ b, -1.0, 1.0)))
