@@ -1,5 +1,6 @@
 """
-Tests for bottom-up positioning with Hungarian algorithm assignment.
+Tests for bottom-up positioning with Hungarian algorithm assignment,
+build_cost_matrix edge cases, and Fibonacci sphere coordinate geometry.
 """
 
 import numpy as np
@@ -26,6 +27,19 @@ def _angular_distance_xyz(point_a, point_b):
     return float(np.arccos(np.clip(a @ b, -1.0, 1.0)))
 
 
+def _fibonacci_unit_sphere_cartesian(n: int) -> np.ndarray:
+    """Unit vectors for the Fibonacci sphere lattice (from coordinates_generate_radians)."""
+    angles = coordinates_generate_radians(n)
+    if n <= 0:
+        return np.zeros((0, 3), dtype=float)
+    theta, phi = angles[:, 0], angles[:, 1]
+    return np.c_[
+        np.cos(theta) * np.sin(phi),
+        np.sin(theta) * np.sin(phi),
+        np.cos(phi),
+    ]
+
+
 def test_build_cost_matrix_shape():
     """Cost matrix has shape (n, n) for n children and n slots."""
     n = 4
@@ -49,6 +63,31 @@ def test_build_cost_matrix_matches_cartesian_angular_distance():
     b = np.array([[th2, ph2]])
     C = build_cost_matrix(a, b)
     assert C[0, 0] == pytest.approx(expected, abs=1e-12)
+
+
+def test_build_cost_matrix_empty_inputs():
+    """Empty angle arrays yield zero-sized cost matrix."""
+    z = np.zeros((0, 2))
+    C = build_cost_matrix(z, coordinates_generate_radians(3))
+    assert C.shape == (0, 3)
+    C2 = build_cost_matrix(coordinates_generate_radians(2), z)
+    assert C2.shape == (2, 0)
+
+
+def test_build_cost_matrix_rectangular_shape():
+    """Non-square child vs slot counts is allowed."""
+    child = coordinates_generate_radians(2)
+    slots = coordinates_generate_radians(5)
+    C = build_cost_matrix(child, slots)
+    assert C.shape == (2, 5)
+
+
+def test_coordinates_on_unit_sphere():
+    """Fibonacci lattice angles map to Cartesian points on the unit sphere."""
+    for n in (8, 32, 128):
+        points = _fibonacci_unit_sphere_cartesian(n)
+        radii = np.sqrt((points**2).sum(axis=1))
+        assert np.allclose(radii, 1.0, atol=1e-9)
 
 
 # -----------------------------------------------------------------------------

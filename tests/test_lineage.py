@@ -65,13 +65,6 @@ def test_apply_error_rates_reproducible_with_seed():
     assert [leaf.is_aneuploid for leaf in leaves2] == flags1
 
 
-def test_coordinates_on_unit_sphere():
-    for n in (8, 32, 128):
-        points = _fibonacci_unit_sphere_cartesian(n)
-        radii = np.sqrt((points**2).sum(axis=1))
-        assert np.allclose(radii, 1.0, atol=1e-9)
-
-
 def test_build_embryo_respects_supplied_coords():
     coords = _unit_vectors(
         [
