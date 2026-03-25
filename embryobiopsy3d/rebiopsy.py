@@ -1,7 +1,10 @@
 # This file contains the rebiopsy simulation
 
+from typing import Callable, Optional
 from .biopsy import Sampling
 from .lineage_simulator import (
+    Cell,
+    Embryo,
     build_embryo,
     generate_tree,
     apply_error_rates,
@@ -13,27 +16,27 @@ DEFAULT_RELAX_STEP_FRACTION = 0.02
 DEFAULT_MAX_RELAX_ATTEMPTS = 20
 
 
-def _distances_to_center(center_vec, coords):
+def _distances_to_center(center_vec: np.ndarray, coords: np.ndarray) -> np.ndarray:
     """Vectorized angular distance to center for coords (N,3)."""
     dots = np.clip(coords @ center_vec, -1.0, 1.0)
     return np.arccos(dots)
 
 
 def rebiopsy_at_error_rate(
-    p_mito,
-    p_meio,
-    dispersal,
-    distance,
-    root=None,
-    leaves=None,
-    sibling_pairs=None,
-    generations=8,
-    n_trials=100,
-    exp_id=None,
+    p_mito: float,
+    p_meio: float,
+    dispersal: float,
+    distance: float,
+    root: "Cell" = None,
+    leaves: list["Cell"] = None,
+    sibling_pairs: list[tuple["Cell", "Cell"]] = None,
+    generations: int = 8,
+    n_trials: int = 100,
+    exp_id: int = None,
     *,
-    coords_cache=None,
-    placement_strategy="hungarian",
-):
+    coords_cache: np.ndarray = None,
+    placement_strategy: str = "hungarian",
+) -> list[dict]:
     """
     Simulate embryos at a given error rate for rebiopsy.
 
@@ -95,15 +98,15 @@ def rebiopsy_at_error_rate(
 
 
 def rebiopsy_single_embryo(
-    embryo,
-    distance,
+    embryo: "Embryo",
+    distance: float,
     return_metadata: bool = False,
     *,
-    rng=None,
-    seed=None,
-    relax_step=None,
-    max_attempts=None,
-):
+    rng: Optional[np.random.Generator] = None,
+    seed: int = None,
+    relax_step: float = None,
+    max_attempts: int = None,
+) -> bool | dict:
     """
     Take two biopsies from the same embryo with a given distance between them
 
@@ -222,18 +225,18 @@ def rebiopsy_single_embryo(
 
 
 def simulate_experiment(
-    meio_range=[0.0, 1.0],
-    mito_range=[0.0, 1.0],
-    dispersal_range=[0.0, 0.5, 1.0],
-    distance_range=[0.0, 0.5, 1.0],
-    e=100,
-    n_trials=100,
-    generations=8,
-    verbose=True,
-    progress_callback=None,
-    seed=None,
-    placement_strategy="hungarian",
-):
+    meio_range: list[float] = [0.0, 1.0],
+    mito_range: list[float] = [0.0, 1.0],
+    dispersal_range: list[float] = [0.0, 0.5, 1.0],
+    distance_range: list[float] = [0.0, 0.5, 1.0],
+    e: int = 100,
+    n_trials: int = 100,
+    generations: int = 8,
+    verbose: bool = True,
+    progress_callback: Optional[Callable[[int, int, float], None]] = None,
+    seed: int = None,
+    placement_strategy: str = "hungarian",
+) -> list[dict]:
     """
     Simulate rebiopsy at given error rate
     Return a dictionary of percentage of matches for each error rate and dispersal

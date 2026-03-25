@@ -1,3 +1,5 @@
+"""Integration tests for rebiopsy using real `Sampling` (via `rebiopsy_single_embryo`)."""
+
 import math
 import numpy as np
 
@@ -59,58 +61,21 @@ def make_embryo_with_leaves(leaves):
     )
 
 
-class FakeSampling:
-    """
-    Deterministic sampling stub:
-    - includes center in selected
-    - uses simple slicing to select cells
-    """
-
-    def __init__(self, leaves, rng=None):
-        self.leaves = leaves
-        self.rng = rng or np.random.default_rng(0)
-
-    def dist_on_sphere(self, a, b):
-        return _angular_distance_xyz(a, b)
-
-    def current_biopsy(self, n_cells=5, center_leaf=None):
-        center_leaf = center_leaf or self.leaves[0]
-        selected = list(self.leaves[: max(1, n_cells)])
-        if center_leaf not in selected:
-            selected[-1] = center_leaf
-        return {"center_leaf": center_leaf, "selected": selected}
-
-    def categorize_biopsy(self, biopsy_leaves):
-        aneuploid_count = sum(leaf.is_aneuploid for leaf in biopsy_leaves)
-        has_aneu = aneuploid_count > 0
-        has_eu = any(not leaf.is_aneuploid for leaf in biopsy_leaves)
-        if has_aneu and has_eu:
-            return "mosaic", aneuploid_count
-        if has_aneu:
-            return "aneuploid", aneuploid_count
-        return "euploid", 0
-
-
-def test_rebiopsy_matches_on_all_euploid(monkeypatch):
-    monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
+def test_rebiopsy_matches_on_all_euploid():
     embryo = make_embryo_with_leaves(make_leaves())
+    assert rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5, seed=0) is True
 
-    assert rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5) is True
 
-
-def test_rebiopsy_detects_category_mismatch(monkeypatch):
-    monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
+def test_rebiopsy_detects_category_mismatch():
     leaves = make_leaves()
     leaves[-1].is_aneuploid = True
     embryo = make_embryo_with_leaves(leaves)
-
-    assert rebiopsy.rebiopsy_single_embryo(embryo, distance=0.0) is False
+    # With seed=3, first random center is (0,0,1); nearest five cells exclude the
+    # opposite-pole aneuploid at (0,0,-1), so standard=euploid and second=aneuploid.
+    assert rebiopsy.rebiopsy_single_embryo(embryo, distance=0.0, seed=3) is False
 
 
 def test_rebiopsy_at_error_rate_returns_fraction(monkeypatch):
-    monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
-
-    # Patch build_embryo to always return a small deterministic embryo
     def patched_build_embryo(*args, **kwargs):
         return ls_build_embryo(
             generations=3,
@@ -131,8 +96,7 @@ def test_rebiopsy_at_error_rate_returns_fraction(monkeypatch):
     assert all(r["p_mito"] == 0.0 and r["p_meio"] == 0.0 for r in rows)
 
 
-def test_rebiopsy_returns_error_metadata_when_no_remaining_cells(monkeypatch):
-    monkeypatch.setattr(rebiopsy, "Sampling", FakeSampling)
+def test_rebiopsy_returns_error_metadata_when_no_remaining_cells():
     embryo = make_embryo_with_leaves(make_leaves()[:5])
 
     meta = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5, return_metadata=True)
@@ -173,27 +137,3 @@ def test_actual_distance_matches_center_distance():
     second = np.asarray(meta["second_center"].position)
     expected = _angular_distance_xyz(center, second)
     assert math.isclose(meta["actual_distance"], expected, rel_tol=1e-9, abs_tol=1e-9)
-
-
-def test_relax_params_allow_forced_fallback(monkeypatch):
-    class SingleCellSampling(FakeSampling):
-        def current_biopsy(self, n_cells=5, center_leaf=None):
-            center_leaf = center_leaf or self.leaves[0]
-            return {"center_leaf": center_leaf, "selected": [center_leaf]}
-
-    monkeypatch.setattr(rebiopsy, "Sampling", SingleCellSampling)
-    leaves = make_leaves()
-    embryo = make_embryo_with_leaves(leaves)
-
-    meta = rebiopsy.rebiopsy_single_embryo(
-        embryo,
-        distance=1.0,
-        return_metadata=True,
-        max_attempts=0,
-    )
-    center = np.asarray(meta["standard_center"].position)
-    remaining = [leaf for leaf in leaves if leaf is not meta["standard_center"]]
-    dists = [
-        _angular_distance_xyz(center, np.asarray(leaf.position)) for leaf in remaining
-    ]
-    assert math.isclose(meta["actual_distance"], max(dists), rel_tol=1e-9, abs_tol=1e-9)

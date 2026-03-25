@@ -7,13 +7,13 @@ from typing import Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from .lineage_simulator import _ensure_rng
+from .lineage_simulator import Cell, _ensure_rng
 
 
 class Sampling:
     """Sampling helpers on the embryo surface."""
 
-    def __init__(self, leaves, rng: Optional[np.random.Generator] = None):
+    def __init__(self, leaves: list["Cell"], rng: Optional[np.random.Generator] = None):
         self.leaves = [cell for cell in leaves if cell.position is not None]
         if not self.leaves:
             raise ValueError(
@@ -53,18 +53,21 @@ class Sampling:
         return order
 
     # randomly pick a cluster of 5 cells
-    def current_biopsy(self, n_cells=5, center_leaf=None):
+    def current_biopsy(
+        self, n_cells: int = 5, center_leaf: Optional["Cell"] = None
+    ) -> dict[str, list["Cell"]]:
         # using closeness measurement of the leaves, pick five consecutive cells from the coordinates
         if center_leaf is None:
             center_leaf = self.rng.choice(self.leaves)
         # pull from the cache
         center_idx = self._index_map[center_leaf]
         order = self._sorted_neighbors(center_idx)
+        # selected cells include the center leaf
         selected_cells = [self.leaves[i] for i in order[:n_cells]]
 
         return {"center_leaf": center_leaf, "selected": selected_cells}
 
-    def categorize_biopsy(self, biopsy_leaves):
+    def categorize_biopsy(self, biopsy_leaves: list["Cell"]) -> tuple[str, int]:
         """
         Categorize the biopsy into euploid (all euploid cells), mosaic (mixture of euploid and aneuploid cells),
         or aneuploid (all aneuploid cells). Return the category and the number of aneuploid cells.

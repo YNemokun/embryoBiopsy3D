@@ -137,3 +137,62 @@ def test_categorize_biopsy_empty_raises():
     s = Sampling(leaves)
     with pytest.raises(ValueError, match="no leaves"):
         s.categorize_biopsy([])
+
+
+def test_sampling_raises_when_no_leaf_has_position():
+    """__init__ requires at least one leaf with .position (message from Sampling)."""
+    c = Cell(None, 0)
+    c.position = None
+    with pytest.raises(ValueError, match="position"):
+        Sampling([c])
+
+
+def test_sampling_skips_leaves_without_position():
+    """Leaves with position None are dropped; remaining cells are used."""
+    leaves = make_simple_leaves()[:4]
+    leaves[1].position = None
+    s = Sampling(leaves)
+    assert len(s.leaves) == 3
+    assert leaves[1] not in s._index_map
+
+
+def test_dist_on_sphere_coincident_is_zero():
+    s = Sampling(make_simple_leaves())
+    v = np.array([3.0, 4.0, 12.0])
+    assert s.dist_on_sphere(v, v) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_dist_on_sphere_antipodal_is_pi():
+    s = Sampling(make_simple_leaves())
+    a = np.array([1.0, 0.0, 0.0])
+    b = np.array([-2.0, 0.0, 0.0])
+    assert s.dist_on_sphere(a, b) == pytest.approx(math.pi, abs=1e-12)
+
+
+def test_pairwise_angular_matches_pairwise_dist_on_sphere():
+    """Static distance matrix is consistent with dist_on_sphere on unit directions."""
+    leaves = make_simple_leaves()[:4]
+    s = Sampling(leaves)
+    coords = np.array([np.asarray(c.position, float) for c in leaves])
+    M = Sampling._pairwise_angular(coords)
+    for i in range(len(leaves)):
+        for j in range(len(leaves)):
+            expected = s.dist_on_sphere(coords[i], coords[j])
+            assert M[i, j] == pytest.approx(expected, abs=1e-10)
+
+
+def test_sorted_neighbors_returns_cached_array_on_second_call():
+    leaves = make_simple_leaves()
+    s = Sampling(leaves)
+    first = s._sorted_neighbors(0)
+    second = s._sorted_neighbors(0)
+    assert second is first
+
+
+def test_current_biopsy_n_cells_larger_than_pool_returns_all_leaves():
+    """order[:n_cells] cannot exceed the number of indexed leaves."""
+    leaves = make_simple_leaves()[:4]
+    s = Sampling(leaves)
+    res = s.current_biopsy(n_cells=100, center_leaf=leaves[0])
+    assert len(res["selected"]) == 4
+    assert len({id(c) for c in res["selected"]}) == 4
