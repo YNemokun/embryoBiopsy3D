@@ -9,9 +9,18 @@ import pytest
 from embryobiopsy3d.lineage_simulator import (
     Cell,
     Embryo,
-    generate_tree,
+    _ensure_rng,
+    _ideal_angles_from_parent,
+    _reflect_phi,
+    _wrap_theta,
+    apply_error_rates,
+    build_cost_matrix,
     build_embryo,
+    build_id_dict_and_layers,
+    cell_division,
     coordinates_generate_radians,
+    generate_tree,
+    reset_flags,
 )
 
 
@@ -118,10 +127,12 @@ def test_embryo_set_aneuploid_by_id_updates_subtree_when_include_subtree_true():
     )
     # Set aneuploid on root - should affect entire tree
     node_id = root.id
+    assert emb.mutated_cells is None
     affected = emb.set_aneuploid_by_id(node_id, is_aneuploid=True, include_subtree=True)
     assert root.is_aneuploid
     assert all(leaf.is_aneuploid for leaf in leaves)
     assert len(affected) == 1 + 2 + 4  # root + gen1 + gen2
+    assert emb.mutated_cells == affected
 
 
 def test_embryo_set_aneuploid_by_id_updates_only_cell_when_include_subtree_false():
@@ -142,6 +153,7 @@ def test_embryo_set_aneuploid_by_id_updates_only_cell_when_include_subtree_false
     )
     assert leaves[0].is_aneuploid
     assert len(affected) == 1
+    assert emb.mutated_cells == affected
     # Other leaves should remain euploid
     assert sum(1 for leaf in leaves if leaf.is_aneuploid) == 1
 
@@ -230,6 +242,7 @@ def test_embryo_set_aneuploid_by_generation_index():
     )
     assert leaves[0].is_aneuploid
     assert len(affected) == 1
+    assert emb.mutated_cells == affected
 
 
 # -----------------------------------------------------------------------------
@@ -380,3 +393,307 @@ def test_build_embryo_raises_when_dispersal_out_of_range():
             mito_rate=0.0,
             placement_dispersal=-0.1,
         )
+
+
+# -----------------------------------------------------------------------------
+# _ensure_rng
+# -----------------------------------------------------------------------------
+
+
+def test_ensure_rng_returns_same_generator_when_rng_provided_without_seed():
+    """When `rng` is passed and `seed` is None, that instance is returned."""
+    rng = np.random.default_rng(42)
+    out = _ensure_rng(rng, seed=None)
+    assert out is rng
+
+
+def test_ensure_rng_seed_wins_when_rng_and_seed_both_provided():
+    """If both `rng` and `seed` are set, a new `default_rng(seed)` is returned (ignores `rng`)."""
+    rng = np.random.default_rng(999)
+    out = _ensure_rng(rng, seed=42)
+    assert out is not rng
+    expected = np.random.default_rng(42).random()
+    assert out.random() == expected
+
+
+def test_ensure_rng_without_rng_uses_seed():
+    """Without rng, seed produces a reproducible generator."""
+    a = _ensure_rng(None, seed=12345)
+    b = _ensure_rng(None, seed=12345)
+    assert a.random() == b.random()
+
+
+def test_ensure_rng_without_rng_and_without_seed_is_unseeded():
+    """Without rng and without seed, returns a new default_rng (not equal identity each call)."""
+    r1 = _ensure_rng(None, None)
+    r2 = _ensure_rng(None, None)
+    assert r1 is not r2
+    # Two draws are very unlikely to match both by accident for float64
+    assert r1.random() != r2.random() or r1.random() != r2.random()
+
+
+# -----------------------------------------------------------------------------
+# Embryo / Cell construction
+# -----------------------------------------------------------------------------
+
+
+def test_cell_initialization_defaults():
+    """Cell.__init__ sets lineage fields and default flags."""
+    root = Cell(parent=None, generation=0)
+    assert root.parent is None
+    assert root.generation == 0
+    assert root.children == []
+    assert root.is_aneuploid is False
+    assert root.is_dead is False
+    assert root.position is None
+    assert root.layer_position is None
+    assert isinstance(root.id, str) and len(root.id) > 0
+
+    child = Cell(parent=root, generation=1)
+    assert child.parent is root
+    assert child.generation == 1
+
+
+def test_embryo_dataclass_initialization():
+    """Embryo holds references and optional fields."""
+    root = Cell()
+    emb = Embryo(
+        root=root,
+        leaves=[],
+        sibling_pairs=[],
+        coords=None,
+        placement_dispersal=None,
+        generation_rng=None,
+        mutated_cells=None,
+        id_dict={root.id: root},
+        generation_layers=[[root]],
+    )
+    assert emb.root is root
+    assert emb.leaves == []
+    assert emb.mutated_cells is None
+
+
+def test_cell_repr_contains_key_fields():
+    """__repr__ exposes id prefix, generation, flags (smoke)."""
+    c = Cell(parent=None, generation=0)
+    text = repr(c)
+    assert "gen=0" in text
+    assert "aneuploid=False" in text
+
+
+# -----------------------------------------------------------------------------
+# Lineage helpers: build_id_dict_and_layers, cell_division, generations
+# -----------------------------------------------------------------------------
+
+
+def test_build_id_dict_and_layers_empty_root():
+    """None root yields empty dict and layers."""
+    d, layers = build_id_dict_and_layers(None)
+    assert d == {}
+    assert layers == []
+
+
+def test_cell_division_creates_every_generation_layer_zero_through_n():
+    """For `generations` divisions, layers 0..generations exist with 2^k cells at gen k."""
+    for n in (1, 2, 4, 5):
+        root = Cell(parent=None, generation=0)
+        _, leaves, _, id_dict, generation_layers = cell_division(
+            root,
+            generations=n,
+            include_metadata=True,
+        )
+        assert len(generation_layers) == n + 1
+        for k in range(n + 1):
+            assert len(generation_layers[k]) == 2**k
+        assert all(c.generation == n for c in leaves)
+        assert len(leaves) == 2**n
+        assert len(id_dict) == sum(2**k for k in range(n + 1))
+
+
+def test_cell_division_generations_zero_returns_root_only():
+    """generations=0 performs no divisions; leaves empty."""
+    root = Cell(parent=None, generation=0)
+    r, leaves, pairs, id_dict, gl = cell_division(
+        root, generations=0, include_metadata=True
+    )
+    assert r is root
+    assert leaves == []
+    assert pairs == []
+    assert gl[0] == [root]
+
+
+def test_generate_tree_matches_cell_division_layer_counts():
+    """generate_tree is consistent with full binary layer counts."""
+    for gens in (0, 1, 3):
+        root, leaves, _, id_dict, generation_layers = generate_tree(
+            generations=gens, include_metadata=True
+        )
+        if gens == 0:
+            assert leaves == []
+            assert generation_layers[0] == [root]
+        else:
+            assert len(generation_layers) == gens + 1
+            assert len(generation_layers[gens]) == 2**gens
+            assert len(leaves) == 2**gens
+
+
+# -----------------------------------------------------------------------------
+# apply_error_rates, set_aneuploid returns, reset_flags
+# -----------------------------------------------------------------------------
+
+
+def test_apply_error_rates_returns_list_of_cells():
+    """apply_error_rates returns a list of Cell instances (mutated tracking)."""
+    root, _, _ = generate_tree(generations=2)
+    mutated = apply_error_rates(
+        root, meio_rate=0.0, mito_rate=0.0, rng=np.random.default_rng(0)
+    )
+    assert isinstance(mutated, list)
+    assert all(isinstance(c, Cell) for c in mutated)
+
+
+def test_apply_error_rates_and_set_aneuploid_both_return_affected_lists():
+    """Stochastic and manual paths return lists of touched cells."""
+    root, leaves, _, _, _ = generate_tree(generations=2, include_metadata=True)
+    m1 = apply_error_rates(root, 0.0, 0.0, rng=np.random.default_rng(0))
+    m2 = leaves[0].set_aneuploid(True, include_subtree=False)
+    assert isinstance(m1, list)
+    assert isinstance(m2, list)
+    assert m2 == [leaves[0]]
+
+
+def test_reset_flags_clears_flags_and_list_for_combined_mutations():
+    """reset_flags clears aneuploid flags on listed cells and empties the list in place."""
+    root, leaves, _, _, _ = generate_tree(generations=2, include_metadata=True)
+    rng = np.random.default_rng(0)
+    # Force some structure: apply_error_rates may leave root euploid at 0 rates
+    mutated = apply_error_rates(root, meio_rate=1.0, mito_rate=0.0, rng=rng)
+    manual = root.set_aneuploid(True, include_subtree=True)
+    combined = []
+    combined.extend(mutated)
+    combined.extend(m for m in manual if m not in combined)
+    assert any(c.is_aneuploid for c in combined)
+    assert reset_flags(combined) is None
+    assert combined == []
+    assert not any(c.is_aneuploid for c in leaves) and not root.is_aneuploid
+
+
+# -----------------------------------------------------------------------------
+# Angle helpers: wrap, reflect, ideal child angles
+# -----------------------------------------------------------------------------
+
+
+def test_wrap_theta_wraps_to_zero_two_pi():
+    """_wrap_theta maps to [0, 2π)."""
+    assert _wrap_theta(0.0) == pytest.approx(0.0)
+    assert _wrap_theta(2 * np.pi) == pytest.approx(0.0)
+    assert _wrap_theta(-np.pi) == pytest.approx(np.pi)
+    assert 0 <= _wrap_theta(25.3) < 2 * np.pi
+
+
+def test_reflect_phi_maps_into_zero_pi():
+    """_reflect_phi folds angles into [0, π]."""
+    assert _reflect_phi(0.5) == pytest.approx(0.5)
+    assert _reflect_phi(np.pi) == pytest.approx(np.pi)
+    # Above π reflects across equator
+    assert _reflect_phi(np.pi + 0.3) == pytest.approx(np.pi - 0.3)
+    # Wrap then reflect: 2π -> 0
+    assert _reflect_phi(2 * np.pi) == pytest.approx(0.0)
+
+
+def test_ideal_angles_from_parent_respects_wrap_and_reflect():
+    """Child angles stay in valid ranges via wrap/reflect."""
+    th, ph = 1.0, 0.8
+    child = _ideal_angles_from_parent(th, ph, alpha=0.4, beta=0.2)
+    assert child.shape == (2,)
+    assert 0 <= child[0] < 2 * np.pi
+    assert 0 <= child[1] <= np.pi
+
+
+# -----------------------------------------------------------------------------
+# build_cost_matrix (additional cases)
+# -----------------------------------------------------------------------------
+
+
+def test_build_cost_matrix_empty_inputs():
+    """Empty angle arrays yield zero-sized cost matrix."""
+    z = np.zeros((0, 2))
+    C = build_cost_matrix(z, coordinates_generate_radians(3))
+    assert C.shape == (0, 3)
+    C2 = build_cost_matrix(coordinates_generate_radians(2), z)
+    assert C2.shape == (2, 0)
+
+
+def test_build_cost_matrix_rectangular_shape():
+    """Non-square child vs slot counts is allowed."""
+    child = coordinates_generate_radians(2)
+    slots = coordinates_generate_radians(5)
+    C = build_cost_matrix(child, slots)
+    assert C.shape == (2, 5)
+
+
+# -----------------------------------------------------------------------------
+# build_embryo scenarios
+# -----------------------------------------------------------------------------
+
+
+def test_build_embryo_without_tree_generates_and_applies_error_rates():
+    """No tree: generations + rates build tree, apply_error_rates fills mutated_cells."""
+    emb = build_embryo(
+        generations=2,
+        meio_rate=0.0,
+        mito_rate=0.0,
+        seed=1,
+    )
+    assert emb.mutated_cells == []
+    assert emb.generation_rng is not None
+    emb2 = build_embryo(
+        generations=2,
+        meio_rate=1.0,
+        mito_rate=0.0,
+        seed=2,
+    )
+    assert isinstance(emb2.mutated_cells, list)
+    assert emb2.root.is_aneuploid
+
+
+def test_build_embryo_with_tree_does_not_call_apply_error_rates():
+    """Supplying (root, leaves, sibling_pairs) ignores meio_rate/mito_rate; mutated_cells empty."""
+    root, leaves, siblings = generate_tree(generations=2)
+    emb = build_embryo(
+        root=root,
+        leaves=leaves,
+        sibling_pairs=siblings,
+        meio_rate=1.0,
+        mito_rate=1.0,
+        seed=99,
+    )
+    assert emb.mutated_cells == []
+    assert not root.is_aneuploid
+    emb.set_aneuploid_by_id(root.id, is_aneuploid=True, include_subtree=True)
+    assert len(emb.mutated_cells) == 7
+
+
+def test_build_embryo_with_tree_backfills_metadata_when_missing():
+    """Tree path rebuilds id_dict and generation_layers when omitted."""
+    root, leaves, siblings, _, _ = generate_tree(generations=2, include_metadata=True)
+    emb = build_embryo(root=root, leaves=leaves, sibling_pairs=siblings)
+    assert emb.id_dict[root.id] is root
+    assert len(emb.generation_layers) == 3
+
+
+def test_build_embryo_tree_then_manual_apply_error_rates():
+    """Callers who need error rates on an existing tree must run apply_error_rates themselves."""
+    root, leaves, siblings = generate_tree(generations=2)
+    rng = np.random.default_rng(0)
+    mutated = apply_error_rates(root, meio_rate=1.0, mito_rate=0.0, rng=rng)
+    emb = build_embryo(
+        root=root,
+        leaves=leaves,
+        sibling_pairs=siblings,
+        rng=np.random.default_rng(1),
+    )
+    assert root.is_aneuploid
+    assert emb.mutated_cells == []
+    reset_flags(mutated)
+    assert not root.is_aneuploid
