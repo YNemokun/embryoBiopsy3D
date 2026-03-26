@@ -96,6 +96,26 @@ def test_rebiopsy_at_error_rate_returns_fraction(monkeypatch):
     assert all(r["p_mito"] == 0.0 and r["p_meio"] == 0.0 for r in rows)
 
 
+def test_rebiopsy_at_error_rate_reproducible_with_seed():
+    """Same seed yields identical trial outcomes (shared RNG across apply_error_rates and biopsies)."""
+    kwargs = dict(
+        p_mito=0.2,
+        p_meio=0.1,
+        dispersal=0.3,
+        distance=0.5,
+        n_trials=12,
+        seed=4242,
+    )
+    rows_a = rebiopsy.rebiopsy_at_error_rate(**kwargs)
+    rows_b = rebiopsy.rebiopsy_at_error_rate(**kwargs)
+    assert len(rows_a) == len(rows_b)
+    for a, b in zip(rows_a, rows_b):
+        assert a["match"] == b["match"]
+        assert a["standard_category"] == b["standard_category"]
+        assert a["second_category"] == b["second_category"]
+        assert a["concordance"] == b["concordance"]
+
+
 def test_rebiopsy_returns_error_metadata_when_no_remaining_cells():
     embryo = make_embryo_with_leaves(make_leaves()[:5])
 

@@ -3,6 +3,7 @@
 from typing import Callable, Optional
 from .biopsy import Sampling
 from .lineage_simulator import (
+    _ensure_rng,
     Cell,
     Embryo,
     build_embryo,
@@ -34,6 +35,8 @@ def rebiopsy_at_error_rate(
     n_trials: int = 100,
     exp_id: int = None,
     *,
+    rng: Optional[np.random.Generator] = None,
+    seed: Optional[int] = None,
     coords_cache: np.ndarray = None,
     placement_strategy: str = "hungarian",
 ) -> list[dict]:
@@ -41,10 +44,13 @@ def rebiopsy_at_error_rate(
     Simulate embryos at a given error rate for rebiopsy.
 
     Returns a list of per-trial dicts with match and metadata.
+
+    Randomness: pass ``rng`` for a shared advancing stream across trials, or pass
+    ``seed`` (without ``rng``) to construct one.
     """
     rows = []
 
-    # TODO: add seed to make it reproducible
+    rng = _ensure_rng(rng, seed)
     # simulate one embryo lineage tree
     if root is None or leaves is None or sibling_pairs is None:
         root, leaves, sibling_pairs = generate_tree(generations=generations)
@@ -56,13 +62,15 @@ def rebiopsy_at_error_rate(
             sibling_pairs=sibling_pairs,
             placement_dispersal=dispersal,
             placement_strategy=placement_strategy,
+            rng=rng,
         )
         coords_cache = baseline_embryo.coords
 
     for i in range(n_trials):
-        # TODO: add seed to the build_embryo function to make it reproducible
         # generate aneuploidy
-        mutated_cells = apply_error_rates(root, meio_rate=p_meio, mito_rate=p_mito)
+        mutated_cells = apply_error_rates(
+            root, meio_rate=p_meio, mito_rate=p_mito, rng=rng
+        )
         # generate the embryo with the same tree, just apply the error rates
         embryo = build_embryo(
             root=root,
@@ -70,12 +78,14 @@ def rebiopsy_at_error_rate(
             sibling_pairs=sibling_pairs,
             placement_dispersal=dispersal,
             coords=coords_cache,
+            rng=rng,
         )
         # record biopsy results with metadata
         meta = rebiopsy_single_embryo(
             embryo,
             distance,
             return_metadata=True,
+            rng=rng,
         )
         meta.update(
             {
@@ -103,7 +113,7 @@ def rebiopsy_single_embryo(
     return_metadata: bool = False,
     *,
     rng: Optional[np.random.Generator] = None,
-    seed: int = None,
+    seed: Optional[int] = None,
     relax_step: float = None,
     max_attempts: int = None,
 ) -> bool | dict:
@@ -112,12 +122,13 @@ def rebiopsy_single_embryo(
 
     distance: fraction of pi (0.0 to 1.0) for the target angular distance
     Return whether the two biopsies are a match (True/False).
-    Optionally pass rng or seed to make sampling deterministic.
+
+    For reproducible sampling, pass ``rng``
+
     relax_step: optional angular step in radians for relaxing distance threshold
     max_attempts: optional cap for relaxation iterations
     """
-    if rng is None and seed is not None:
-        rng = np.random.default_rng(seed)
+    rng = _ensure_rng(rng, seed)
 
     # do one biopsy
     sampling_scheme = Sampling(embryo.leaves, rng=rng)
@@ -151,6 +162,7 @@ def rebiopsy_single_embryo(
             }
         return False
 
+    # controlled randomness
     sampling_scheme = Sampling(new_leaves, rng=rng)
 
     # do another biopsy at a given distance
@@ -234,7 +246,8 @@ def simulate_experiment(
     generations: int = 8,
     verbose: bool = True,
     progress_callback: Optional[Callable[[int, int, float], None]] = None,
-    seed: int = None,
+    rng: Optional[np.random.Generator] = None,
+    seed: Optional[int] = None,
     placement_strategy: str = "hungarian",
 ) -> list[dict]:
     """
@@ -242,8 +255,9 @@ def simulate_experiment(
     Return a dictionary of percentage of matches for each error rate and dispersal
 
     progress_callback: optional function(completed_trials, total_trials, percentage) for custom progress reporting
-    seed: optional RNG seed for error rate generation
+    seed: optional RNG seed (used with ``_ensure_rng`` to build ``rng`` for all draws)
     """
+    rng = _ensure_rng(rng, seed)
     results = []
     total_trials = len(dispersal_range) * len(distance_range) * e * n_trials
     completed_trials = 0
@@ -264,7 +278,6 @@ def simulate_experiment(
 
     _report()
     # randomly generate E error rates for meiosis and mitosis
-    rng = np.random.default_rng(seed)
     meio_rates = rng.uniform(meio_range[0], meio_range[1], e)
     mito_rates = rng.uniform(mito_range[0], mito_range[1], e)
 
@@ -275,12 +288,14 @@ def simulate_experiment(
         for dispersal in dispersal_range:
             for leaf in leaves:
                 leaf.position = None
+            # cache the embryo structure to avoid rebuilding it for each trial
             baseline_embryo = build_embryo(
                 root=root,
                 leaves=leaves,
                 sibling_pairs=siblings,
                 placement_dispersal=dispersal,
                 placement_strategy=placement_strategy,
+                rng=rng,
             )
             coords_cache = baseline_embryo.coords
 
@@ -298,6 +313,7 @@ def simulate_experiment(
                     exp_id=i,
                     coords_cache=coords_cache,
                     placement_strategy=placement_strategy,
+                    rng=rng,
                 )
                 results.extend(rows)
                 completed_trials += n_trials
