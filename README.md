@@ -7,20 +7,41 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -e ".[test]"
 ```
 
-## Usage
+Same as: `make install` (from the repo root).
 
-**TO BE IMPLEMENTED**
+## Primary API
+
+Typical workflows build a lineage tree, place cells on the sphere, then run biopsy / rebiopsy logic. The functions below are the usual entry points (import from the submodules shown).
+
+**Lineage and geometry** (`embryobiopsy3d.lineage_simulator`)
+
+- **`generate_tree`** — Build a binary division tree to a fixed number of generations (structure only; positions not set until placement).
+- **`build_embryo`** — Construct an **`Embryo`**: optional tree generation, meiotic/mitotic error assignment, and spherical placement of leaves (or supply fixed coordinates).
+- **`apply_error_rates`** / **`reset_flags`** — Draw aneuploidy on an existing tree and clear flags between repeated trials (used by rebiopsy batch helpers).
+
+**Biopsy sampling** (`embryobiopsy3d.biopsy`)
+
+- **`Sampling`** — Pick spatial clusters of cells on the sphere and **categorize** a sample (euploid / mosaic / aneuploid).
+
+**Rebiopsy simulation** (`embryobiopsy3d.rebiopsy`)
+
+- **`rebiopsy_single_embryo`** — Two biopsies on one embryo at a target angular separation; returns concordance and category metadata (used in notebooks and one-off analyses).
+- **`rebiopsy_at_error_rate`** — Run many trials with fixed meiotic/mitotic rates and shared or cached geometry; returns a list of per-trial result dicts.
+- **`simulate_experiment`** — Higher-level sweep over dispersal, rebiopsy distance, and sampled error rates (large batch summaries).
+
 
 ## Tests
 
-With the project root on `PYTHONPATH` (via `pyproject.toml`), run:
+With the package installed in editable mode, run:
 
 ```bash
-pytest test/
+pytest tests/
 ```
+
+Same as `make test`
 
 ## Dependencies
 
@@ -32,3 +53,11 @@ pytest test/
 - **lineage_simulator.py** — Builds a binary lineage tree, generates/annotates aneuploidy, and places leaf cells on a sphere
 - **biopsy.py** — Sampling helpers for selecting cell clusters on the embryo surface
 - **rebiopsy.py** — Rebiopsy simulation
+
+## Terminology (simulation)
+
+- **Mosaic**: any sample that contains both euploid and aneuploid cells is labeled mosaic (no percentage threshold in the current assignment logic). Number of aneuploidy cells for each biopsy are included in the trial data.
+- **Dispersal**: controls how far daughter cells move from the parent-centered ideal after division (placement metric).
+- **Distance**: minimum separation between first and second biopsy centers (sampling metric).
+
+Trials can reuse one tree structure with flags reset between trials; independence depends on that reset being correct.
