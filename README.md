@@ -12,6 +12,12 @@ pip install -e ".[test]"
 
 Same as: `make install` (from the repo root).
 
+For the interactive visualization demo, install the optional visualization stack:
+
+```bash
+pip install -e ".[viz]"
+```
+
 ## Primary API
 
 Typical workflows build a lineage tree, place cells on the sphere, then run biopsy / rebiopsy logic. The functions below are the usual entry points (import from the submodules shown).
@@ -43,16 +49,41 @@ pytest tests/
 
 Same as `make test`
 
+## Visualization Demo
+
+Launch the browser demo with:
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+The demo shows:
+
+- a 3D embryo view with sampled rebiopsy leaves highlighted
+- a 2D lineage tree aligned to the same embryo state
+- controls for dispersal, rebiopsy distance, random meiotic/mitotic errors, and generation-targeted aneuploidy
+
+Visualization helpers live in `embryobiopsy3d.visualization`:
+
+- `scene.py` builds reusable, serializable embryo / biopsy scene data
+- `plotly_views.py` turns those scenes into Plotly figures for the Streamlit app
+
 ## Dependencies
 
 - numpy
 - scipy
+- pandas (optional, for the visualization demo)
+- plotly (optional, for the visualization demo)
+- streamlit (optional, for the visualization demo)
 
 ## File Overview
 
 - **lineage_simulator.py** — Builds a binary lineage tree, generates/annotates aneuploidy, and places leaf cells on a sphere
 - **biopsy.py** — Sampling helpers for selecting cell clusters on the embryo surface
 - **rebiopsy.py** — Rebiopsy simulation
+- **visualization/scene.py** — Reusable scene-building helpers for embryo, lineage, and rebiopsy views
+- **visualization/plotly_views.py** — Plotly figure builders used by the interactive demo
+- **app/streamlit_app.py** — Streamlit entrypoint for the browser-shareable visualization demo
 
 ## Terminology (simulation)
 

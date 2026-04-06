@@ -32,6 +32,11 @@ test = [
     "pytest-cov",
     "pytest-xdist",
 ]
+viz = [
+    "pandas>=2.0",
+    "plotly>=5.0",
+    "streamlit>=1.30",
+]
 
 [project.urls]
 Homepage = "https://github.com/YNemokun/embryoBiopsy3D"
