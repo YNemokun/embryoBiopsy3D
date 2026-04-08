@@ -1,5 +1,9 @@
 # embryoBiopsy3D
 
+[![CI](https://github.com/YNemokun/embryoBiopsy3D/actions/workflows/python-package.yml/badge.svg)](https://github.com/YNemokun/embryoBiopsy3D/actions/workflows/python-package.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 `embryoBiopsy3D` is a Python library that constructs an spherical embryo, placing cells with respect to their lineage history and simulating spatial dispersal movements. It then allows biopsy operations, including rebiopsy of the same embryo, and returns categorized results of the sample. This simulation aims to assist understanding and improvement of IVF's genetic testing process.
 
 ## Setup
