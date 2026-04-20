@@ -116,7 +116,6 @@ def build_demo_embryo(
     target_generation: Optional[int] = None,
     target_index: int = 0,
     include_subtree: bool = True,
-    placement_strategy: str = "hungarian",
 ) -> Embryo:
     """Build an embryo for interactive demos."""
     root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
@@ -140,7 +139,6 @@ def build_demo_embryo(
         id_dict=id_dict,
         generation_layers=generation_layers,
         placement_dispersal=dispersal,
-        placement_strategy=placement_strategy,
         seed=placement_seed,
     )
 
@@ -168,7 +166,6 @@ def build_demo_scene(
     include_subtree: bool = True,
     rebiopsy_distance: Optional[float] = None,
     biopsy_seed: int = 11,
-    placement_strategy: str = "hungarian",
 ) -> EmbryoScene:
     """Build a complete scene for construction-only or rebiopsy demos."""
     embryo = build_demo_embryo(
@@ -182,7 +179,6 @@ def build_demo_scene(
         target_generation=target_generation,
         target_index=target_index,
         include_subtree=include_subtree,
-        placement_strategy=placement_strategy,
     )
 
     biopsy_meta = None
@@ -205,7 +201,6 @@ def build_demo_scene(
             "mito_rate": mito_rate,
             "error_seed": error_seed,
             "placement_seed": placement_seed,
-            "placement_strategy": placement_strategy,
             "target_generation": target_generation,
             "target_index": target_index,
             "include_subtree": include_subtree,

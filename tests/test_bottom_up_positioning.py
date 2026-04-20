@@ -7,13 +7,11 @@ import numpy as np
 import pytest
 
 from embryobiopsy3d.lineage_simulator import (
-    Embryo,
     generate_tree,
     build_embryo,
     coordinates_generate_radians,
     build_cost_matrix,
     _bottom_up_position_leaves,
-    _bottom_up_position_leaves_greedy,
     _angles_to_cartesian,
 )
 
@@ -242,87 +240,3 @@ def test_angles_to_cartesian_roundtrip():
     assert xyz.shape == (3,)
     # On unit sphere, norm should be radius
     assert np.linalg.norm(xyz) == pytest.approx(radius, abs=1e-12)
-
-
-# -----------------------------------------------------------------------------
-# Greedy placement strategy
-# -----------------------------------------------------------------------------
-
-
-def test_bottom_up_greedy_assignments_are_bijective():
-    """Greedy placement: each child gets exactly one slot; each slot used at most once."""
-    _, leaves, _, _, generation_layers = generate_tree(
-        generations=3, include_metadata=True
-    )
-    ordered, coords, _ = _bottom_up_position_leaves_greedy(
-        generation_layers=generation_layers,
-        dispersal=0.0,
-        rng=np.random.default_rng(42),
-    )
-    assert len(ordered) == len(leaves)
-    for leaf in ordered:
-        assert leaf.layer_position is not None
-        assert len(leaf.layer_position) == 3
-    positions = [tuple(p) for p in coords]
-    assert len(set(positions)) == len(positions)
-
-
-def test_bottom_up_greedy_requires_generation_layers():
-    """Greedy placement raises if generation_layers is None."""
-    with pytest.raises(ValueError, match="generation_layers is required"):
-        _bottom_up_position_leaves_greedy(
-            generation_layers=None,
-            dispersal=0.0,
-        )
-
-
-def test_bottom_up_greedy_raises_when_dispersal_out_of_range():
-    """Greedy placement raises when dispersal outside [0, 1]."""
-    _, _, _, _, gl = generate_tree(generations=2, include_metadata=True)
-    with pytest.raises(ValueError, match="dispersal must be between"):
-        _bottom_up_position_leaves_greedy(
-            generation_layers=gl,
-            dispersal=1.5,
-        )
-    with pytest.raises(ValueError, match="dispersal must be between"):
-        _bottom_up_position_leaves_greedy(
-            generation_layers=gl,
-            dispersal=-0.1,
-        )
-
-
-def test_build_embryo_with_placement_strategy_greedy():
-    """build_embryo(placement_strategy='greedy') produces valid embryo."""
-    emb = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=123,
-        placement_strategy="greedy",
-    )
-    assert isinstance(emb, Embryo)
-    assert len(emb.leaves) == 8
-    assert all(leaf.position is not None for leaf in emb.leaves)
-    positions = [tuple(np.asarray(leaf.position)) for leaf in emb.leaves]
-    assert len(set(positions)) == len(positions)
-
-
-def test_build_embryo_greedy_reproducible_with_seed():
-    """Same seed produces same positions with greedy placement."""
-    emb1 = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=99,
-        placement_strategy="greedy",
-    )
-    emb2 = build_embryo(
-        generations=3,
-        meio_rate=0.0,
-        mito_rate=0.0,
-        seed=99,
-        placement_strategy="greedy",
-    )
-    pos1 = np.array([leaf.position for leaf in emb1.leaves])
-    pos2 = np.array([leaf.position for leaf in emb2.leaves])
-    np.testing.assert_array_almost_equal(pos1, pos2)

@@ -108,7 +108,15 @@ def _points_3d(nodes: Iterable[SceneNode], *, size: float, name: str):
     )
 
 
-def _rings_3d(nodes: Iterable[SceneNode], *, color: str, size: float, name: str):
+def _rings_3d(
+    nodes: Iterable[SceneNode],
+    *,
+    color: str,
+    size: float,
+    name: str,
+    line_width: float = 12,
+):
+    """Hollow markers used as biopsy rings; size dominates visibility in 3D."""
     nodes = list(nodes)
     return go.Scatter3d(
         x=[node.x for node in nodes],
@@ -120,7 +128,7 @@ def _rings_3d(nodes: Iterable[SceneNode], *, color: str, size: float, name: str)
         marker={
             "size": size,
             "color": "rgba(0,0,0,0)",
-            "line": {"color": color, "width": 20},
+            "line": {"color": color, "width": line_width},
         },
     )
 
@@ -218,13 +226,28 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
         )
     if nodes:
         figure.add_trace(_points_3d(nodes, size=6, name="Cells"))
+    # Ring markers must be larger than leaf dots or the 3D outline reads as a hairline.
+    _ring_size = 14
+    _ring_line = 14
     if first:
         figure.add_trace(
-            _rings_3d(first, color=BIOPSY_1_COLOR, size=9, name="First biopsy")
+            _rings_3d(
+                first,
+                color=BIOPSY_1_COLOR,
+                size=_ring_size,
+                name="First biopsy",
+                line_width=_ring_line,
+            )
         )
     if second:
         figure.add_trace(
-            _rings_3d(second, color=BIOPSY_2_COLOR, size=9, name="Second biopsy")
+            _rings_3d(
+                second,
+                color=BIOPSY_2_COLOR,
+                size=_ring_size,
+                name="Second biopsy",
+                line_width=_ring_line,
+            )
         )
     if first_center:
         figure.add_trace(_labels_3d(first_center, text="1", color=BIOPSY_1_COLOR))

@@ -38,7 +38,6 @@ def rebiopsy_at_error_rate(
     rng: Optional[np.random.Generator] = None,
     seed: Optional[int] = None,
     coords_cache: np.ndarray = None,
-    placement_strategy: str = "hungarian",
 ) -> list[dict]:
     """
     Simulate embryos at a given error rate for rebiopsy.
@@ -61,7 +60,6 @@ def rebiopsy_at_error_rate(
             leaves=leaves,
             sibling_pairs=sibling_pairs,
             placement_dispersal=dispersal,
-            placement_strategy=placement_strategy,
             rng=rng,
         )
         coords_cache = baseline_embryo.coords
@@ -248,7 +246,6 @@ def simulate_experiment(
     progress_callback: Optional[Callable[[int, int, float], None]] = None,
     rng: Optional[np.random.Generator] = None,
     seed: Optional[int] = None,
-    placement_strategy: str = "hungarian",
 ) -> list[dict]:
     """
     Simulate rebiopsy at given error rate
@@ -294,7 +291,6 @@ def simulate_experiment(
                 leaves=leaves,
                 sibling_pairs=siblings,
                 placement_dispersal=dispersal,
-                placement_strategy=placement_strategy,
                 rng=rng,
             )
             coords_cache = baseline_embryo.coords
@@ -312,7 +308,6 @@ def simulate_experiment(
                     generations=generations,
                     exp_id=i,
                     coords_cache=coords_cache,
-                    placement_strategy=placement_strategy,
                     rng=rng,
                 )
                 results.extend(rows)

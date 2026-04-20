@@ -366,17 +366,6 @@ def test_build_embryo_raises_when_coords_length_mismatch():
         )
 
 
-def test_build_embryo_raises_when_placement_strategy_invalid():
-    """build_embryo raises when placement_strategy is not hungarian or greedy."""
-    with pytest.raises(ValueError, match="placement_strategy must be either"):
-        build_embryo(
-            generations=3,
-            meio_rate=0.0,
-            mito_rate=0.0,
-            placement_strategy="invalid",
-        )
-
-
 def test_build_embryo_raises_when_dispersal_out_of_range():
     """build_embryo raises when placement_dispersal is outside [0, 1]."""
     with pytest.raises(ValueError, match="dispersal must be between"):

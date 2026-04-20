@@ -553,44 +553,10 @@ def _assign_hungarian_slots(
         ]
 
 
-def _assign_greedy_slots(
-    next_layer: list["Cell"],
-    child_ideal_angles: np.ndarray,
-    angles: np.ndarray,
-    radius: float,
-    rng: Optional[np.random.Generator] = None,
-) -> None:
-    """Assign each child to the nearest, currently unoccupied, and ideal slot."""
-    if len(next_layer) != len(angles):
-        raise ValueError("Mismatch between child count and available angle slots.")
-
-    rng = _ensure_rng(rng)
-    child_order = rng.permutation(len(next_layer))
-
-    # reuse the cost matrix instead of recalculating it for each child
-    cost_matrix = build_cost_matrix(child_ideal_angles, angles)
-
-    for child_idx in child_order:
-        slot_idx = int(np.argmin(cost_matrix[child_idx]))
-        if not np.isfinite(cost_matrix[child_idx, slot_idx]):
-            # should not happen
-            raise ValueError("No available slot found for child placement.")
-
-        next_layer[child_idx].layer_position = [
-            radius,
-            angles[slot_idx][0],
-            angles[slot_idx][1],
-        ]
-
-        # mark this slot unavailable for all remaining children.
-        cost_matrix[:, slot_idx] = np.inf
-
-
 def _run_bottom_up_positioning(
     generation_layers: list[list["Cell"]],
     dispersal: float,
     *,
-    placement_strategy: str,
     rng: Optional[np.random.Generator] = None,
 ) -> tuple[list["Cell"], np.ndarray, list[tuple["Cell", "Cell"]]]:
     """Shared implementation for layered bottom-up leaf placement."""
@@ -632,20 +598,7 @@ def _run_bottom_up_positioning(
             rng=rng,
         )
 
-        if placement_strategy == "hungarian":
-            _assign_hungarian_slots(next_layer, child_ideal_angles, angles, radius)
-        elif placement_strategy == "greedy":
-            _assign_greedy_slots(
-                next_layer,
-                child_ideal_angles,
-                angles,
-                radius,
-                rng=rng,
-            )
-        else:
-            raise ValueError(
-                "placement_strategy must be either 'hungarian' or 'greedy'."
-            )
+        _assign_hungarian_slots(next_layer, child_ideal_angles, angles, radius)
 
         sibling_pairs.extend(generation_sibling_pairs)
         generation_layers[generation] = next_layer
@@ -668,7 +621,6 @@ def _position_leaves(
     coords: np.ndarray,
     placement_dispersal: float,
     generation_layers: list[list["Cell"]],
-    placement_strategy="hungarian",
     rng: Optional[np.random.Generator] = None,
 ) -> tuple[list["Cell"], np.ndarray, list[tuple["Cell", "Cell"]]]:
     """Ensure leaves have positions and return ordered leaves and coords.
@@ -689,25 +641,12 @@ def _position_leaves(
         positions_missing = False
 
     if positions_missing:
-        # Use layered bottom-up placement.
-        if placement_strategy == "hungarian":
-            ordered_leaves, layer_coords, sibling_pairs = _bottom_up_position_leaves(
-                generation_layers=generation_layers,
-                dispersal=placement_dispersal,
-                rng=rng,
-            )
-        elif placement_strategy == "greedy":
-            ordered_leaves, layer_coords, sibling_pairs = (
-                _bottom_up_position_leaves_greedy(
-                    generation_layers=generation_layers,
-                    dispersal=placement_dispersal,
-                    rng=rng,
-                )
-            )
-        else:
-            raise ValueError(
-                "placement_strategy must be either 'hungarian' or 'greedy'."
-            )
+        # Layered bottom-up placement (Hungarian assignment to Fibonacci slots).
+        ordered_leaves, layer_coords, sibling_pairs = _bottom_up_position_leaves(
+            generation_layers=generation_layers,
+            dispersal=placement_dispersal,
+            rng=rng,
+        )
         _convert_layered_positions_to_cartesian_unit_sphere(ordered_leaves)
         coords_array = np.array([leaf.position for leaf in ordered_leaves], dtype=float)
     elif coords_array is None:
@@ -730,26 +669,6 @@ def _bottom_up_position_leaves(
     return _run_bottom_up_positioning(
         generation_layers,
         dispersal,
-        placement_strategy="hungarian",
-        rng=rng,
-    )
-
-
-def _bottom_up_position_leaves_greedy(
-    generation_layers: list[list["Cell"]],
-    dispersal: float,
-    rng: Optional[np.random.Generator] = None,
-) -> tuple[list["Cell"], np.ndarray, list[tuple["Cell", "Cell"]]]:
-    """Assign coordinates per generation using greedy nearest-slot assignment.
-
-    This keeps the same child ideal construction used by Hungarian placement, but
-    assigns each child to the currently nearest unoccupied Fibonacci slot in a
-    randomized child order.
-    """
-    return _run_bottom_up_positioning(
-        generation_layers,
-        dispersal,
-        placement_strategy="greedy",
         rng=rng,
     )
 
@@ -772,7 +691,6 @@ def build_embryo(
     mito_rate: float = None,
     seed: int = None,
     placement_dispersal: float = 0.0,
-    placement_strategy: str = "hungarian",
     rng: Optional[np.random.Generator] = None,
 ) -> Embryo:
     """Build an `Embryo` from either an existing tree or simulation parameters.
@@ -815,7 +733,6 @@ def build_embryo(
         coords=coords,
         placement_dispersal=placement_dispersal,
         generation_layers=generation_layers,
-        placement_strategy=placement_strategy,
         rng=rng,
     )
 
