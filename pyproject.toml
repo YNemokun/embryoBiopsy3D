@@ -41,8 +41,8 @@ viz = [
 [project.urls]
 Homepage = "https://github.com/YNemokun/embryoBiopsy3D"
 
-# [project.scripts]
-# trace-extract= "tracehmm.extract_cli:main"
+[project.scripts]
+embryobiopsy3d = "embryobiopsy3d.cli:main"
 
 [tool.setuptools]
 zip-safe = false

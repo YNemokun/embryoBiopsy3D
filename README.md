@@ -1,4 +1,4 @@
-# embryoBiopsy3D 
+# embryoBiopsy3D
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-embryoBiopsy3D-181717?logo=github)](https://github.com/YNemokun/embryoBiopsy3D)
 
@@ -24,6 +24,50 @@ For the interactive visualization demo, install the optional visualization stack
 ```bash
 pip install -e ".[viz]"
 ```
+
+## Quickstart
+
+### Python
+
+Build an embryo, mark an aneuploid subtree, and run a rebiopsy:
+
+```python
+from embryobiopsy3d.lineage_simulator import build_embryo
+from embryobiopsy3d.rebiopsy import rebiopsy_single_embryo
+
+embryo = build_embryo(
+    generations=8,
+    meio_rate=0.0,
+    mito_rate=0.0,
+    placement_dispersal=0.25,
+    seed=7,
+)
+embryo.set_aneuploid_by_generation_index(4, 0, is_aneuploid=True, include_subtree=True)
+
+result = rebiopsy_single_embryo(embryo, distance=0.5, return_metadata=True, seed=11)
+print(result["standard_category"], "->", result["second_category"],
+      "match:", result["match"])
+```
+
+For random (rather than targeted) aneuploidy, pass non-zero `meio_rate` /
+`mito_rate`. See the API section below for details.
+
+### Command line
+
+The package installs an `embryobiopsy3d` CLI with two subcommands:
+
+```bash
+embryobiopsy3d demo                                  # fast sanity check
+embryobiopsy3d sweep --n-trials 100 --out-dir out/   # small parameter sweep
+```
+
+`demo` builds one embryo, runs a single biopsy, and prints a compact summary.
+`sweep` reproduces the full parameter sweep used for the paper figures,
+writing `rebiopsy_trials.csv` and `rebiopsy_transition_summary.csv` into
+`--out-dir`.
+
+Run `embryobiopsy3d --help`, `embryobiopsy3d demo --help`, or
+`embryobiopsy3d sweep --help` for the full list of options.
 
 ## Primary API
 
@@ -74,6 +118,25 @@ Visualization helpers live in `embryobiopsy3d.visualization`:
 
 - `scene.py` builds reusable, serializable embryo / biopsy scene data
 - `plotly_views.py` turns those scenes into Plotly figures for the Streamlit app
+
+## Deploying the demo (Streamlit Community Cloud)
+
+The repo is ready to deploy on [Streamlit Community Cloud](https://share.streamlit.io)
+for free, with auto-redeploy on every `git push`.
+
+1. Sign in to Streamlit Community Cloud with GitHub and click **New app**.
+2. Point it at this repo, pick the branch (e.g. `main`), and set the main file to
+   `app/streamlit_app.py`.
+3. In **Advanced settings**, select Python **3.12** (to match `requires-python`
+   in `pyproject.toml`).
+4. Click **Deploy**.
+
+Streamlit Cloud installs from the top-level `requirements.txt`, which pulls in
+`numpy`, `scipy`, `pandas`, `plotly`, `streamlit`, and installs the local
+`embryobiopsy3d` package in editable mode (`-e .`) so the app's
+`from embryobiopsy3d.visualization...` imports resolve. After the first deploy,
+editing the live app is just: commit locally, push to the chosen branch, and
+the app rebuilds automatically.
 
 ## Dependencies
 
