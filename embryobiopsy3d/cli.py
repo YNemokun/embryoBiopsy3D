@@ -18,9 +18,9 @@ import argparse
 import sys
 import time
 
-from embryobiopsy3d.lineage_simulator import build_embryo
-from embryobiopsy3d.rebiopsy import rebiopsy_single_embryo
-from embryobiopsy3d.trials import (
+from .lineage_simulator import build_embryo
+from .rebiopsy import rebiopsy_single_embryo
+from .trials import (
     DEFAULT_BASE_SEED,
     DEFAULT_CELL_INDEX,
     DEFAULT_DISPERSAL_VALUES,
@@ -41,11 +41,18 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     )
     embryo = build_embryo(
         generations=args.generations,
-        meio_rate=0.0,
-        mito_rate=0.0,
+        meio_rate=args.meio_rate,
+        mito_rate=args.mito_rate,
         placement_dispersal=args.dispersal,
         seed=args.seed,
     )
+
+    if args.meio_rate > 0.0 or args.mito_rate > 0.0:
+        n_random = len(embryo.mutated_cells or [])
+        print(
+            f"  Random errors: meio_rate={args.meio_rate}, "
+            f"mito_rate={args.mito_rate} -> {n_random} aneuploid cells"
+        )
 
     if args.aneuploid_generation is not None:
         embryo.set_aneuploid_by_generation_index(
@@ -107,6 +114,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
 
+    ##################### DEMO ######################################################
+
     demo = subparsers.add_parser(
         "demo",
         help="Build one embryo and run a single rebiopsy (fast sanity check).",
@@ -133,12 +142,31 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     demo.add_argument("--seed", type=int, default=7, help="Random seed.")
     demo.add_argument(
+        "--meio-rate",
+        type=float,
+        default=0.0,
+        help=(
+            "Per-division meiotic error rate in [0, 1]. Randomly marks cells "
+            "aneuploid during tree construction. Defaults to 0."
+        ),
+    )
+    demo.add_argument(
+        "--mito-rate",
+        type=float,
+        default=0.0,
+        help=(
+            "Per-division mitotic error rate in [0, 1]. Randomly marks cells "
+            "aneuploid during tree construction. Defaults to 0."
+        ),
+    )
+    demo.add_argument(
         "--aneuploid-generation",
         type=int,
         default=None,
         help=(
             "If given, mark the subtree rooted at (generation, index) aneuploid "
-            "before biopsy."
+            "before biopsy. Can be combined with --meio-rate/--mito-rate for a "
+            "hybrid deterministic + random aneuploidy."
         ),
     )
     demo.add_argument(
@@ -148,6 +176,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Index within the aneuploid generation (used only with --aneuploid-generation).",
     )
     demo.set_defaults(func=_cmd_demo)
+
+    ##################### SWEEP ######################################################
 
     sweep = subparsers.add_parser(
         "sweep",

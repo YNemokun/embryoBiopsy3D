@@ -1,14 +1,9 @@
 """
 Generate fixed-subtree rebiopsy trial data for selected divisions.
 
-This module provides ``run_analysis`` which generates one full per-trial
-table and one compact 3x3 transition-probability summary, sweeping over
-(generation index, dispersal, distance) with a configurable number of
-trials per cell.
-
-This is the library form of ``generate_trial_data.py`` from the
-``embryo_spatial_sampling`` repo; it is invoked by the ``embryobiopsy3d
-sweep`` CLI command.
+This module runs one full per-trial table and one compact 3x3 transition-probability
+summary, sweeping over (generation index, dispersal, distance) with
+a configurable number of trials per cell.
 """
 
 from __future__ import annotations
@@ -20,9 +15,10 @@ import time
 
 import numpy as np
 
-from embryobiopsy3d.lineage_simulator import build_embryo, generate_tree
-from embryobiopsy3d.rebiopsy import rebiopsy_single_embryo
+from .lineage_simulator import build_embryo, generate_tree
+from .rebiopsy import rebiopsy_single_embryo
 
+# Default sweep grids and run settings (used when callers pass None to run_analysis).
 DEFAULT_DISTANCE_VALUES = [0.0, 0.5, 1.0]
 DEFAULT_GENERATION_INDEX_VALUES = list(range(8))
 DEFAULT_DISPERSAL_VALUES = [0.0, 1.0]
@@ -30,9 +26,11 @@ DEFAULT_GENERATIONS = 8
 DEFAULT_N_TRIALS = 1000
 DEFAULT_OUT_DIR = "data/all_generations"
 DEFAULT_BASE_SEED = 7
-DEFAULT_CELL_INDEX = 0
+DEFAULT_CELL_INDEX = 0  # cell_index picks which leaf marks error.
 
+# Ordered biopsy categorization
 BIOPSY_CATEGORIES = ["euploid", "mosaic", "aneuploid"]
+# Per-trial CSV schema. One row per (division, dispersal, distance) replicate.
 TRIAL_FIELDNAMES = [
     "seed_index",
     "seed",
@@ -62,12 +60,14 @@ def _clear_tree_state(generation_layers: list[list]) -> None:
 
 def _aneuploid_leaf_count(total_generations: int, generation_index: int) -> int:
     """Return the number of aneuploid leaves in the marked subtree."""
+    # error at generation g produces 2^(8-g) aneuploid leaves
     return 2 ** (total_generations - generation_index)
 
 
 def _save_csv(path: str, rows: list[dict]) -> None:
     """Save rows to CSV."""
     if not rows:
+        # write file so consumers see a real path.
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("")
         return
@@ -93,10 +93,12 @@ def _build_summary_rows_from_counts(
     P(second_category | standard_category, division, dispersal, distance)
     """
     summary_rows = []
+    # group_totals: one count per (division, cell, leaf count, dispersal, distance).
     for group_key in sorted(group_totals.keys()):
         division, cell_index, aneuploid_leaf_count, dispersal, distance = group_key
         n_trials = group_totals[group_key]
 
+        # Condition on the first-biopsy category
         for standard_category in BIOPSY_CATEGORIES:
             standard_key = group_key + (standard_category,)
             standard_total = standard_totals.get(standard_key, 0)
@@ -104,11 +106,13 @@ def _build_summary_rows_from_counts(
             for second_category in BIOPSY_CATEGORIES:
                 transition_key = standard_key + (second_category,)
                 transition_count = transition_counts.get(transition_key, 0)
+                # P(second | first) = cell count / total trials with that first category.
                 conditional_probability = (
                     transition_count / standard_total
                     if standard_total
                     else float("nan")
                 )
+                # P(first, second) in this (division, dispersal, distance) group.
                 joint_probability = transition_count / n_trials
 
                 summary_rows.append(
@@ -177,7 +181,9 @@ def run_analysis(
 
     os.makedirs(out_dir, exist_ok=True)
 
+    # Derives a long stream of trial seeds to reproduce same trial CSVs.
     seed_sequence = np.random.default_rng(base_seed)
+    # placement and rebiopsy use the same tree across all sweeps
     root, leaves, siblings, id_dict, generation_layers = generate_tree(
         generations=generations,
         include_metadata=True,
@@ -188,12 +194,14 @@ def run_analysis(
     trial_csv_path = os.path.join(out_dir, "rebiopsy_trials.csv")
     summary_csv_path = os.path.join(out_dir, "rebiopsy_transition_summary.csv")
 
+    # Cartesian product of sweeps times n_trials replicates per cell
     total_trials = (
         len(generation_index_values)
         * len(dispersal_values)
         * len(distance_values)
         * n_trials
     )
+    # sanity check: must match total_trials at end.
     trial_counter = 0
 
     with open(trial_csv_path, "w", newline="", encoding="utf-8") as handle:
@@ -205,9 +213,11 @@ def run_analysis(
             for dispersal in dispersal_values:
                 for distance in distance_values:
                     for trial in range(n_trials):
+                        # New seed for placement + error pattern + biopsy draws this trial
                         seed = int(seed_sequence.integers(0, 2**31 - 1))
 
                         _clear_tree_state(generation_layers)
+                        # Hungarian sphere placement with dispersal
                         embryo = build_embryo(
                             root=root,
                             leaves=leaves,
@@ -217,6 +227,7 @@ def run_analysis(
                             placement_dispersal=dispersal,
                             seed=seed,
                         )
+                        # Mark the subtree at (generation_index, cell_index) as aneuploid.
                         embryo.set_aneuploid_by_generation_index(
                             generation_index,
                             cell_index,
@@ -224,6 +235,7 @@ def run_analysis(
                             include_subtree=True,
                         )
 
+                        # First biopsy then second at ~distance*pi
                         meta = rebiopsy_single_embryo(
                             embryo,
                             distance,
@@ -271,6 +283,7 @@ def run_analysis(
     if trial_counter != total_trials:
         raise ValueError("Generated trial count does not match the expected total.")
 
+    # Expand counts into a long table of probabilities
     summary_rows = _build_summary_rows_from_counts(
         transition_counts,
         standard_totals,

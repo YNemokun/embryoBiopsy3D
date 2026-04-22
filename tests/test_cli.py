@@ -199,6 +199,93 @@ def test_demo_custom_distance_appears_in_output(capsys):
     assert "requested distance  : 0.3" in out
 
 
+def test_demo_default_does_not_print_random_errors_line(capsys):
+    """With default rates of 0, the random-errors info line is absent."""
+    cli.main(["demo", "--generations", "4"])
+    out = capsys.readouterr().out
+    assert "Random errors" not in out
+
+
+def test_demo_with_meio_rate_prints_random_errors_line(capsys):
+    """A nonzero --meio-rate causes the random-errors summary line to appear."""
+    cli.main(
+        [
+            "demo",
+            "--generations",
+            "5",
+            "--meio-rate",
+            "0.5",
+            "--seed",
+            "3",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "Random errors:" in out
+    assert "meio_rate=0.5" in out
+    assert "mito_rate=0.0" in out
+    assert "aneuploid cells" in out
+
+
+def test_demo_with_mito_rate_prints_random_errors_line(capsys):
+    """A nonzero --mito-rate alone also triggers the random-errors line."""
+    cli.main(
+        [
+            "demo",
+            "--generations",
+            "5",
+            "--mito-rate",
+            "0.3",
+            "--seed",
+            "3",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "Random errors:" in out
+    assert "mito_rate=0.3" in out
+
+
+def test_demo_random_errors_are_deterministic_given_seed(capsys):
+    """Same seed + same rates => same aneuploid cell count."""
+    argv = [
+        "demo",
+        "--generations",
+        "6",
+        "--meio-rate",
+        "0.2",
+        "--mito-rate",
+        "0.1",
+        "--seed",
+        "42",
+    ]
+    cli.main(argv)
+    first = capsys.readouterr().out
+    cli.main(argv)
+    second = capsys.readouterr().out
+    assert first == second
+
+
+def test_demo_combines_random_and_targeted_aneuploidy(capsys):
+    """--meio-rate together with --aneuploid-generation prints both lines."""
+    cli.main(
+        [
+            "demo",
+            "--generations",
+            "5",
+            "--meio-rate",
+            "0.4",
+            "--aneuploid-generation",
+            "2",
+            "--aneuploid-cell-index",
+            "0",
+            "--seed",
+            "5",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "Random errors:" in out
+    assert "Marked aneuploid subtree: generation=2, index=0" in out
+
+
 # ---------------------------------------------------------------------------
 # ``sweep`` subcommand: file creation and schema
 # ---------------------------------------------------------------------------
