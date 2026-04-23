@@ -63,28 +63,32 @@ def main() -> None:
     type=_POSITIVE_INT,
     default=6,
     show_default=True,
-    help="Number of cell generations.",
+    help="Number of cell generations, commonly 8 for human embryos at day 5.",
 )
 @click.option(
     "--dispersal",
     type=_UNIT_INTERVAL,
     default=0.25,
     show_default=True,
-    help="Placement dispersal in [0, 1].",
+    help="The extent of placement dispersion (how much the cells are spread out) in [0, 1]. "
+    "0: sibling cells are next to each other, "
+    "1: sibling cells are placed at opposite ends of the embryo.",
 )
 @click.option(
     "--distance",
     type=_UNIT_INTERVAL,
     default=0.5,
     show_default=True,
-    help="Rebiopsy target distance as a fraction of pi in [0, 1].",
+    help="Distance between the two biopsies as a fraction of pi in [0, 1]. "
+    "0: biopsies are next to each other, "
+    "1: biopsies are at opposite ends of the embryo.",
 )
 @click.option(
     "--seed",
     type=int,
     default=7,
     show_default=True,
-    help="Random seed.",
+    help="Random seed for placement, error simulation (if any), and rebiopsy.",
 )
 @click.option(
     "--meio-rate",
@@ -92,8 +96,9 @@ def main() -> None:
     default=0.0,
     show_default=True,
     help=(
-        "Per-division meiotic error rate in [0, 1]. Randomly marks cells "
-        "aneuploid during tree construction."
+        "Part of rate-based random error simulation. "
+        "Per-meiosis error rate in [0, 1]. Randomly marks the first cell "
+        "aneuploid at tree construction."
     ),
 )
 @click.option(
@@ -102,8 +107,9 @@ def main() -> None:
     default=0.0,
     show_default=True,
     help=(
-        "Per-division mitotic error rate in [0, 1]. Randomly marks cells "
-        "aneuploid during tree construction."
+        "Part of rate-based random error simulation. "
+        "Per-mitosis error rate in [0, 1]. Randomly marks cells "
+        "aneuploid during each cell division in the tree construction."
     ),
 )
 @click.option(
@@ -111,9 +117,8 @@ def main() -> None:
     type=_NON_NEGATIVE_INT,
     default=None,
     help=(
-        "If given, mark the subtree rooted at (generation, index) aneuploid "
-        "before biopsy. Can be combined with --meio-rate/--mito-rate for a "
-        "hybrid deterministic + random aneuploidy."
+        "Part of cell or generation-specific error setting. "
+        "If given, mark the subtree rooted at (generation, index) aneuploid. "
     ),
 )
 @click.option(
@@ -121,7 +126,10 @@ def main() -> None:
     type=_NON_NEGATIVE_INT,
     default=0,
     show_default=True,
-    help="Index within the aneuploid generation (used only with --aneuploid-generation).",
+    help=(
+        "Part of cell or generation-specific error setting. "
+        "Index within the generation to mark aneuploid (used only with --aneuploid-generation)."
+    ),
 )
 def demo(
     generations: int,
@@ -196,7 +204,7 @@ def demo(
     type=_POSITIVE_INT,
     default=DEFAULT_GENERATIONS,
     show_default=True,
-    help="Total cell generations in the lineage tree.",
+    help="Number of cell generations, commonly 8 for human embryos at day 5.",
 )
 @click.option(
     "--n-trials",
@@ -213,6 +221,7 @@ def demo(
     default=tuple(DEFAULT_GENERATION_INDEX_VALUES),
     show_default=True,
     help=(
+        "Part of cell or generation-specific error setting. "
         "Generation index to place the fixed aneuploid subtree. "
         "Pass the flag multiple times to sweep several values, e.g. "
         "`--generation-idx 1 --generation-idx 2`."
@@ -225,7 +234,10 @@ def demo(
     default=tuple(DEFAULT_DISPERSAL_VALUES),
     show_default=True,
     help=(
-        "Dispersal value in [0, 1] to sweep. Pass the flag multiple times, "
+        "The extent of placement dispersion (how much the cells are spread out) in [0, 1]. "
+        "0: sibling cells are next to each other, "
+        "1: sibling cells are placed at opposite ends of the embryo. "
+        "Pass the flag multiple times, "
         "e.g. `--dispersal 0.0 --dispersal 1.0`."
     ),
 )
@@ -236,7 +248,9 @@ def demo(
     default=tuple(DEFAULT_DISTANCE_VALUES),
     show_default=True,
     help=(
-        "Rebiopsy distance (fraction of pi) in [0, 1] to sweep. "
+        "Distance between the two biopsies as a fraction of pi in [0, 1]. "
+        "0: biopsies are next to each other, "
+        "1: biopsies are at opposite ends of the embryo. "
         "Pass the flag multiple times."
     ),
 )
@@ -245,14 +259,17 @@ def demo(
     type=_NON_NEGATIVE_INT,
     default=DEFAULT_CELL_INDEX,
     show_default=True,
-    help="Index of the cell whose subtree is marked aneuploid.",
+    help=(
+        "Part of cell or generation-specific error setting. "
+        "Index within the generation to mark aneuploid."
+    ),
 )
 @click.option(
     "--seed",
     type=int,
     default=DEFAULT_BASE_SEED,
     show_default=True,
-    help="Base seed for the per-trial RNG sequence.",
+    help="Random seed for placement.",
 )
 @click.option(
     "--out-dir",

@@ -57,7 +57,7 @@ For random (rather than targeted) aneuploidy, pass non-zero `meio_rate` /
 The package installs an `embryobiopsy3d` CLI with two subcommands:
 
 ```bash
-embryobiopsy3d demo                                  # fast sanity check
+embryobiopsy3d demo  --mito-rate 0.15 --dispersal 0  # sanity check
 embryobiopsy3d sweep --n-trials 100 --out-dir out/   # small parameter sweep
 ```
 
