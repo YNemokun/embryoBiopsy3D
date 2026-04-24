@@ -30,3 +30,6 @@ venv/
 # Local / secrets
 .env
 .envrc
+
+# CLI artifacts
+data/*

@@ -1,0 +1,9 @@
+# Dependencies for the Streamlit Community Cloud deployment of app/streamlit_app.py.
+# Mirrors the runtime dependencies in pyproject.toml plus the [viz] extras,
+# and installs the local embryobiopsy3d package so intra-package imports resolve.
+numpy>=1.20
+scipy>=1.7
+pandas>=2.0
+plotly>=5.0
+streamlit>=1.30
+-e .
