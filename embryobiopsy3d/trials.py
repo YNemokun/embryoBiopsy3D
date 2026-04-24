@@ -12,6 +12,7 @@ from collections import defaultdict
 import csv
 import os
 import time
+from tqdm import tqdm
 
 import numpy as np
 
@@ -208,7 +209,7 @@ def run_analysis(
         trial_writer = csv.DictWriter(handle, fieldnames=TRIAL_FIELDNAMES)
         trial_writer.writeheader()
 
-        for generation_index in generation_index_values:
+        for generation_index in tqdm(generation_index_values):
             aneuploid_leaf_count = _aneuploid_leaf_count(generations, generation_index)
             for dispersal in dispersal_values:
                 for distance in distance_values:

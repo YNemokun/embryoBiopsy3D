@@ -17,8 +17,6 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[test]"
 ```
 
-Same as: `make install` (from the repo root).
-
 For the interactive visualization demo, install the optional visualization stack:
 
 ```bash
@@ -95,7 +93,7 @@ Typical workflows build a lineage tree, place cells on the sphere, then run biop
 With the package installed in editable mode, run:
 
 ```bash
-pytest tests/
+pytest -n 4 --verbose
 ```
 
 Same as `make test`
@@ -138,14 +136,6 @@ Streamlit Cloud installs from the top-level `requirements.txt`, which pulls in
 editing the live app is just: commit locally, push to the chosen branch, and
 the app rebuilds automatically.
 
-## Dependencies
-
-- numpy
-- scipy
-- pandas (optional, for the visualization demo)
-- plotly (optional, for the visualization demo)
-- streamlit (optional, for the visualization demo)
-
 ## File Overview
 
 - **lineage_simulator.py** — Builds a binary lineage tree, generates/annotates aneuploidy, and places leaf cells on a sphere
@@ -157,7 +147,7 @@ the app rebuilds automatically.
 
 ## Terminology (simulation)
 
-- **Mosaic**: any sample that contains both euploid and aneuploid cells is labeled mosaic (no percentage threshold in the current assignment logic). Number of aneuploidy cells for each biopsy are included in the trial data.
+- **Mosaic**: any sample that contains *both* euploid and aneuploid cells is labeled as mosaic (there is no percentage threshold in the current assignment logic). Number of aneuploidy cells within each biopsy are included in the trial data.
 - **Dispersal**: controls how far daughter cells move from the parent-centered ideal after division (placement metric).
 - **Distance**: minimum separation between first and second biopsy centers (sampling metric).
 

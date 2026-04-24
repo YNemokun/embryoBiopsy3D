@@ -4,6 +4,7 @@ requires = [
     "wheel",
     "scipy",
     "numpy",
+    "tqdm"
 ]
 build-backend = "setuptools.build_meta"
 
@@ -22,6 +23,7 @@ dependencies = [
     "numpy>=1.20",
     "scipy>=1.7",
     "rich-click>=1.8",
+    "tqdm"
 ]
 readme = "README.md"
 license = "MIT"
