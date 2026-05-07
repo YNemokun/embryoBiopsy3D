@@ -4,6 +4,7 @@ Plotly figure builders for embryo visualization scenes.
 
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
 import plotly.graph_objects as go
@@ -153,17 +154,13 @@ def _sphere_wireframe_traces():
     latitudes = [-60, -30, 0, 30, 60]
 
     for lon_deg in longitudes:
-        lon = lon_deg * 3.141592653589793 / 180.0
+        lon = math.radians(lon_deg)
         xs, ys, zs = [], [], []
         for step in range(61):
-            theta = 2 * 3.141592653589793 * step / 60
-            xs.append(
-                float(__import__("math").cos(theta) * __import__("math").cos(lon))
-            )
-            ys.append(
-                float(__import__("math").sin(theta) * __import__("math").cos(lon))
-            )
-            zs.append(float(__import__("math").sin(lon)))
+            theta = 2 * math.pi * step / 60
+            xs.append(math.cos(theta) * math.cos(lon))
+            ys.append(math.sin(theta) * math.cos(lon))
+            zs.append(math.sin(lon))
         traces.append(
             go.Scatter3d(
                 x=xs,
@@ -178,14 +175,14 @@ def _sphere_wireframe_traces():
         )
 
     for lat_deg in latitudes:
-        lat = lat_deg * 3.141592653589793 / 180.0
+        lat = math.radians(lat_deg)
         xs, ys, zs = [], [], []
-        radius = float(__import__("math").cos(lat))
-        z = float(__import__("math").sin(lat))
+        radius = math.cos(lat)
+        z = math.sin(lat)
         for step in range(61):
-            theta = 2 * 3.141592653589793 * step / 60
-            xs.append(float(radius * __import__("math").cos(theta)))
-            ys.append(float(radius * __import__("math").sin(theta)))
+            theta = 2 * math.pi * step / 60
+            xs.append(radius * math.cos(theta))
+            ys.append(radius * math.sin(theta))
             zs.append(z)
         traces.append(
             go.Scatter3d(
@@ -201,6 +198,11 @@ def _sphere_wireframe_traces():
         )
 
     return traces
+
+
+_EYE_X0 = 1.5
+_EYE_Y0 = 1.2
+_EYE_Z = 0.9
 
 
 def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figure:
@@ -262,7 +264,7 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
             "yaxis": {"visible": False, "range": [-1.15, 1.15]},
             "zaxis": {"visible": False, "range": [-1.15, 1.15]},
             "aspectmode": "cube",
-            "camera": {"eye": {"x": 1.5, "y": 1.2, "z": 0.9}},
+            "camera": {"eye": {"x": _EYE_X0, "y": _EYE_Y0, "z": _EYE_Z}},
         },
         legend={"orientation": "h", "yanchor": "bottom", "y": 0.01},
     )

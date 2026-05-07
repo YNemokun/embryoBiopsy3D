@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from embryobiopsy3d.visualization.plotly_views import (
     make_embryo_figure,
@@ -20,6 +21,57 @@ from embryobiopsy3d.visualization.scene import (
 
 
 st.set_page_config(page_title="embryoBiopsy3D demo", layout="wide")
+
+_AUTOROTATE_JS = """
+<script>
+(function startAutoRotate() {
+    var R            = Math.sqrt(1.5 * 1.5 + 1.2 * 1.2);
+    var Z_EYE        = 0.9;
+    var START_ANGLE  = Math.atan2(1.2, 1.5);
+    var REVOLUTION_MS = 8000;
+    var startTime    = null;
+
+    function is3d(gd) {
+        try { return !!(gd._fullLayout && gd._fullLayout.scene); }
+        catch(e) { return false; }
+    }
+
+    function tick() {
+        var elapsed = Date.now() - startTime;
+        var angle   = START_ANGLE + (2 * Math.PI * elapsed / REVOLUTION_MS);
+        var eye     = { x: R * Math.cos(angle), y: R * Math.sin(angle), z: Z_EYE };
+
+        var pWin = window.parent;
+        Array.from(pWin.document.querySelectorAll('.js-plotly-plot'))
+             .filter(is3d)
+             .forEach(function(gd) {
+                 try { pWin.Plotly.relayout(gd, { 'scene.camera': { eye: eye } }); }
+                 catch(e) {}
+             });
+        pWin.requestAnimationFrame(tick);
+    }
+
+    function start() {
+        var pWin    = window.parent;
+        var targets = Array.from(pWin.document.querySelectorAll('.js-plotly-plot'))
+                          .filter(is3d);
+        if (!pWin.Plotly || targets.length === 0) {
+            setTimeout(start, 300);
+            return;
+        }
+        startTime = Date.now();
+        pWin.requestAnimationFrame(tick);
+    }
+
+    setTimeout(start, 800);
+})();
+</script>
+"""
+
+
+def _inject_autorotate_js():
+    """Inject a requestAnimationFrame loop that spins every 3-D Plotly chart."""
+    components.html(_AUTOROTATE_JS, height=0)
 
 
 def _format_summary_value(value):
@@ -83,6 +135,9 @@ def _sidebar_controls() -> dict:
         )
         include_subtree = st.sidebar.checkbox("Propagate through subtree", value=True)
 
+    st.sidebar.header("Display")
+    autorotate = st.sidebar.checkbox("Auto-spin sphere", value=False)
+
     st.sidebar.header("Placement and sampling")
     placement_seed = st.sidebar.number_input("Placement seed", value=7, step=1)
     rebiopsy_distance = st.sidebar.slider(
@@ -107,16 +162,19 @@ def _sidebar_controls() -> dict:
         "include_subtree": include_subtree,
         "rebiopsy_distance": rebiopsy_distance,
         "biopsy_seed": int(biopsy_seed),
+        "autorotate": autorotate,
     }
 
 
-def _show_scene(scene, *, title_prefix: str):
+def _show_scene(scene, *, title_prefix: str, autorotate: bool = False):
     left, right = st.columns([1.0, 1.2])
     with left:
         st.plotly_chart(
             make_embryo_figure(scene, title=f"{title_prefix}: embryo"),
             width="stretch",
         )
+        if autorotate:
+            _inject_autorotate_js()
     with right:
         st.plotly_chart(
             make_lineage_figure(scene, title=f"{title_prefix}: lineage tree"),
@@ -144,6 +202,7 @@ def main():
     )
 
     controls = _sidebar_controls()
+    autorotate = controls.pop("autorotate")
     construction_scene = build_demo_scene(
         generations=controls["generations"],
         dispersal=controls["dispersal"],
@@ -163,11 +222,13 @@ def main():
     )
 
     with construction_tab:
-        _show_scene(construction_scene, title_prefix="Construction")
+        _show_scene(
+            construction_scene, title_prefix="Construction", autorotate=autorotate
+        )
         _show_tables(construction_scene)
 
     with rebiopsy_tab:
-        _show_scene(rebiopsy_scene, title_prefix="Rebiopsy")
+        _show_scene(rebiopsy_scene, title_prefix="Rebiopsy", autorotate=autorotate)
         _show_tables(rebiopsy_scene)
         if rebiopsy_scene.biopsy is not None:
             st.caption(
