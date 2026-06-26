@@ -11,6 +11,7 @@ from embryobiopsy3d.lineage_simulator import (
     Embryo,
     _ensure_rng,
     _ideal_angles_from_parent,
+    _initialize_generation_metadata,
     _reflect_phi,
     _wrap_theta,
     apply_error_rates,
@@ -686,3 +687,186 @@ def test_build_embryo_tree_then_manual_apply_error_rates():
     assert emb.mutated_cells == []
     reset_flags(mutated)
     assert not root.is_aneuploid
+
+
+# -----------------------------------------------------------------------------
+# _record_affected_cells — is_aneuploid=False path (line 102)
+# -----------------------------------------------------------------------------
+
+
+def test_record_affected_cells_removes_cell_when_clearing_aneuploid_flag():
+    """Setting is_aneuploid=False on a cell in mutated_cells removes it from the list."""
+    root, leaves, _, id_dict, generation_layers = generate_tree(
+        generations=2, include_metadata=True
+    )
+    emb = Embryo(
+        root=root,
+        leaves=leaves,
+        sibling_pairs=[],
+        id_dict=id_dict,
+        generation_layers=generation_layers,
+    )
+    emb.set_aneuploid_by_id(leaves[0].id, is_aneuploid=True)
+    assert leaves[0] in emb.mutated_cells
+    # Clear the flag — hits the is_aneuploid=False branch in _record_affected_cells.
+    emb.set_aneuploid_by_id(leaves[0].id, is_aneuploid=False)
+    assert leaves[0] not in emb.mutated_cells
+    assert not leaves[0].is_aneuploid
+
+
+# -----------------------------------------------------------------------------
+# _initialize_generation_metadata — short layer-list extension (line 321)
+# -----------------------------------------------------------------------------
+
+
+def test_initialize_generation_metadata_extends_short_generation_layers():
+    """A layer list shorter than generations+1 is extended in place."""
+    root = Cell(parent=None, generation=0)
+    short_layers = [[root]]  # covers generation 0 only
+    _, layers = _initialize_generation_metadata(root, 3, generation_layers=short_layers)
+    assert len(layers) >= 4  # must accommodate generations 0 through 3
+
+
+# -----------------------------------------------------------------------------
+# cell_division edge cases (lines 369, 402)
+# -----------------------------------------------------------------------------
+
+
+def test_cell_division_zero_generations_with_metadata_returns_empty_leaves():
+    """generations=0 with include_metadata=True returns 5-tuple with no leaves."""
+    root = Cell(parent=None, generation=0)
+    result = cell_division(root, generations=0, include_metadata=True)
+    assert len(result) == 5
+    _, leaves, sibling_pairs, _, _ = result
+    assert leaves == []
+    assert sibling_pairs == []
+
+
+def test_cell_division_zero_generations_without_metadata_returns_three_tuple():
+    """generations=0 with include_metadata=False (default) returns bare 3-tuple."""
+    root = Cell(parent=None, generation=0)
+    result = cell_division(root, generations=0)
+    assert len(result) == 3
+    _, leaves, sibling_pairs = result
+    assert leaves == []
+    assert sibling_pairs == []
+
+
+def test_cell_division_without_metadata_returns_three_tuple():
+    """Default include_metadata=False returns (root, leaves, sibling_pairs) only."""
+    root = Cell(parent=None, generation=0)
+    result = cell_division(root, generations=2)
+    assert len(result) == 3
+    _, leaves, sibling_pairs = result
+    assert len(leaves) == 4
+    assert len(sibling_pairs) == 2
+
+
+# -----------------------------------------------------------------------------
+# coordinates_generate_radians — n <= 0 (line 538)
+# -----------------------------------------------------------------------------
+
+
+def test_coordinates_generate_radians_zero_returns_empty_array():
+    result = coordinates_generate_radians(0)
+    assert result.shape == (0, 2)
+
+
+def test_coordinates_generate_radians_negative_returns_empty_array():
+    result = coordinates_generate_radians(-3)
+    assert result.shape == (0, 2)
+
+
+# -----------------------------------------------------------------------------
+# _convert_layered_positions_to_cartesian_unit_sphere — error path (lines 638-641)
+# -----------------------------------------------------------------------------
+
+
+def test_convert_layered_positions_raises_when_both_positions_are_none():
+    from embryobiopsy3d.lineage_simulator import (
+        _convert_layered_positions_to_cartesian_unit_sphere,
+    )
+
+    cell = Cell(parent=None, generation=0)
+    # Both layer_position and position are None by default after construction.
+    assert cell.layer_position is None
+    assert cell.position is None
+    with pytest.raises(ValueError, match="cell has no position"):
+        _convert_layered_positions_to_cartesian_unit_sphere([cell])
+
+
+def test_convert_layered_positions_uses_position_when_layer_position_is_none():
+    """layer_position=None but position set → falls through to the coord assignment."""
+    from embryobiopsy3d.lineage_simulator import (
+        _convert_layered_positions_to_cartesian_unit_sphere,
+    )
+
+    cell = Cell(parent=None, generation=0)
+    cell.position = [1.0, 0.0, 0.0]
+    cell.layer_position = None
+    coords = _convert_layered_positions_to_cartesian_unit_sphere([cell])
+    assert coords.shape == (1, 3)
+    assert np.allclose(coords[0], [1.0, 0.0, 0.0])
+
+
+# -----------------------------------------------------------------------------
+# _generation_targets edge cases (lines 670, 684, 701)
+# -----------------------------------------------------------------------------
+
+
+def test_generation_targets_skips_parents_with_no_children():
+    """child_count==0 branch: parent is skipped; output arrays are empty."""
+    from embryobiopsy3d.lineage_simulator import _generation_targets
+
+    parent = Cell(parent=None, generation=0)
+    parent.layer_position = [1.0, 0.5, 0.5]
+    # children list is already [] by default
+
+    next_layer, child_angles, sibling_pairs = _generation_targets(
+        [parent], generation=1, total_layers=3, alpha=0.3
+    )
+    assert next_layer == []
+    assert child_angles.shape == (0, 2)
+    assert sibling_pairs == []
+
+
+def test_generation_targets_raises_for_non_binary_parent():
+    """child_count != 2 raises ValueError."""
+    from embryobiopsy3d.lineage_simulator import _generation_targets
+
+    parent = Cell(parent=None, generation=0)
+    parent.layer_position = [1.0, 0.5, 0.5]
+    for _ in range(3):
+        child = Cell(parent=parent, generation=1)
+        parent.children.append(child)
+
+    with pytest.raises(ValueError, match="child count is not 2"):
+        _generation_targets([parent], generation=1, total_layers=3, alpha=0.3)
+
+
+# -----------------------------------------------------------------------------
+# _position_leaves — existing-positions path (line 824)
+# -----------------------------------------------------------------------------
+
+
+def test_position_leaves_builds_coords_array_from_existing_positions():
+    """When leaves already have positions and coords=None, line 824 assembles coords_array."""
+    from embryobiopsy3d.lineage_simulator import _position_leaves
+
+    root, leaves, sibling_pairs, id_dict, generation_layers = generate_tree(
+        generations=2, include_metadata=True
+    )
+    # Give every leaf a position so positions_missing=False.
+    for i, leaf in enumerate(leaves):
+        angle = 2 * np.pi * i / len(leaves)
+        leaf.position = [np.cos(angle), np.sin(angle), 0.0]
+
+    _, coords_array, _ = _position_leaves(
+        leaves=leaves,
+        sibling_pairs=sibling_pairs,
+        coords=None,  # no explicit coords → triggers line 824
+        placement_dispersal=0.0,
+        generation_layers=generation_layers,
+    )
+    assert coords_array is not None
+    assert coords_array.shape == (len(leaves), 3)

@@ -157,3 +157,80 @@ def test_actual_distance_matches_center_distance():
     second = np.asarray(meta["second_center"].position)
     expected = _angular_distance_xyz(center, second)
     assert math.isclose(meta["actual_distance"], expected, rel_tol=1e-9, abs_tol=1e-9)
+
+
+def test_rebiopsy_no_remaining_cells_returns_false_bare():
+    """When new_leaves is empty and return_metadata=False, the function returns False."""
+    embryo = make_embryo_with_leaves(make_leaves()[:5])
+    result = rebiopsy.rebiopsy_single_embryo(embryo, distance=0.5, return_metadata=False)
+    assert result is False
+
+
+def test_rebiopsy_falls_back_to_farthest_leaf_when_max_attempts_is_zero():
+    """max_attempts=0 skips the threshold-relaxation loop; argmax fallback path runs."""
+    embryo = make_embryo_with_leaves(make_leaves())
+    meta = rebiopsy.rebiopsy_single_embryo(
+        embryo, distance=1.0, max_attempts=0, return_metadata=True, seed=0
+    )
+    assert meta["second_center"] is not None
+    assert meta["actual_distance"] is not None
+
+
+# ---------------------------------------------------------------------------
+# simulate_experiment
+# ---------------------------------------------------------------------------
+
+
+def test_simulate_experiment_returns_correct_trial_count():
+    results = rebiopsy.simulate_experiment(
+        meio_range=[0.0, 0.1],
+        mito_range=[0.0, 0.1],
+        dispersal_range=[0.0],
+        distance_range=[0.5],
+        e=2,
+        n_trials=3,
+        generations=3,
+        verbose=False,
+        seed=99,
+    )
+    # e * n_trials * len(dispersal_range) * len(distance_range) = 2 * 3 * 1 * 1 = 6
+    assert len(results) == 6
+    assert all("match" in r and "concordance" in r for r in results)
+    assert all(r["rebiopsy_distance"] == 0.5 for r in results)
+
+
+def test_simulate_experiment_verbose_prints_progress(capsys):
+    rebiopsy.simulate_experiment(
+        meio_range=[0.0, 0.1],
+        mito_range=[0.0, 0.1],
+        dispersal_range=[0.0],
+        distance_range=[0.5],
+        e=1,
+        n_trials=2,
+        generations=3,
+        verbose=True,
+        seed=42,
+    )
+    out = capsys.readouterr().out
+    assert "Progress:" in out
+
+
+def test_simulate_experiment_progress_callback_is_invoked():
+    calls = []
+
+    def cb(done, total, pct):
+        calls.append((done, total, pct))
+
+    rebiopsy.simulate_experiment(
+        meio_range=[0.0, 0.1],
+        mito_range=[0.0, 0.1],
+        dispersal_range=[0.0],
+        distance_range=[0.5],
+        e=1,
+        n_trials=2,
+        generations=3,
+        progress_callback=cb,
+        seed=42,
+    )
+    assert len(calls) >= 1
+    assert all(0.0 <= pct <= 100.0 for _, _, pct in calls)

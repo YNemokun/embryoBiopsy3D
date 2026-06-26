@@ -26,6 +26,7 @@ venv/
 .vscode/
 *.swp
 *.swo
+CLAUDE.md
 
 # Local / secrets
 .env
