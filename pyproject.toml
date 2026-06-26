@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 name = "embryo-biopsy-3d"
 classifiers = ["Development Status :: 3 - Alpha", "Intended Audience :: Science/Research", "Programming Language :: Python :: 3"]
 description = "Lineage and spatial placement utilities for embryo simulation"
-keywords = ["admixture", "introgression"]
+keywords = ["embryo", "development"]
 authors = [
     { name = "Angela Yang", email = "qyang40@jhu.edu" },
     { name = "Arjun Biddanda", email = "abiddan1@jhu.edu" },

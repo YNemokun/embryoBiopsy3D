@@ -22,12 +22,25 @@ SIBLING_COLOR = "#d9d9d9"
 
 
 def _node_lookup(scene: EmbryoScene) -> dict[str, SceneNode]:
+    """Build a UUID → SceneNode lookup dict from *scene*."""
     return {node.id: node for node in scene.nodes}
 
 
 def _edge_trace_3d(
     scene: EmbryoScene, edge_ids, *, color: str, width: float, opacity: float
 ):
+    """Return a 3-D line trace connecting the provided edges.
+
+    Args:
+        scene: Source scene containing all node positions.
+        edge_ids: Iterable of :class:`~scene.SceneEdge` objects to draw.
+        color: Line color string.
+        width: Line width in pixels.
+        opacity: Line opacity in ``[0, 1]``.
+
+    Returns:
+        A :class:`plotly.graph_objects.Scatter3d` trace with ``mode="lines"``.
+    """
     nodes = _node_lookup(scene)
     xs, ys, zs = [], [], []
     for edge in edge_ids:
@@ -53,6 +66,18 @@ def _edge_trace_3d(
 def _edge_trace_2d(
     scene: EmbryoScene, edge_ids, *, color: str, width: float, opacity: float
 ):
+    """Return a 2-D line trace connecting the provided lineage edges.
+
+    Args:
+        scene: Source scene providing lineage layout coordinates.
+        edge_ids: Iterable of :class:`~scene.SceneEdge` objects to draw.
+        color: Line color string.
+        width: Line width in pixels.
+        opacity: Line opacity in ``[0, 1]``.
+
+    Returns:
+        A :class:`plotly.graph_objects.Scatter` trace with ``mode="lines"``.
+    """
     nodes = _node_lookup(scene)
     xs, ys = [], []
     for edge in edge_ids:
@@ -72,6 +97,15 @@ def _edge_trace_2d(
 
 
 def _format_node_hover(node: SceneNode) -> str:
+    """Build an HTML hover string for a single scene node.
+
+    Args:
+        node: The :class:`~scene.SceneNode` to describe.
+
+    Returns:
+        Multi-line HTML string (``"<br>"``-joined) for use as a Plotly
+        ``hovertemplate`` entry.
+    """
     status = "aneuploid" if node.is_aneuploid else "euploid"
     bits = [
         f"id={node.id[:8]}",
@@ -91,6 +125,16 @@ def _format_node_hover(node: SceneNode) -> str:
 
 
 def _points_3d(nodes: Iterable[SceneNode], *, size: float, name: str):
+    """Return a 3-D scatter trace for a collection of nodes coloured by aneuploid status.
+
+    Args:
+        nodes: Nodes to render as sphere points.
+        size: Marker size in pixels.
+        name: Legend label for the trace.
+
+    Returns:
+        A :class:`plotly.graph_objects.Scatter3d` trace with ``mode="markers"``.
+    """
     nodes = list(nodes)
     return go.Scatter3d(
         x=[node.x for node in nodes],
@@ -135,6 +179,16 @@ def _rings_3d(
 
 
 def _labels_3d(nodes: Iterable[SceneNode], *, text: str, color: str):
+    """Return a 3-D text trace labelling each node with *text*.
+
+    Args:
+        nodes: Nodes to label.
+        text: Label string placed at each node position.
+        color: Text color.
+
+    Returns:
+        A :class:`plotly.graph_objects.Scatter3d` trace with ``mode="text"``.
+    """
     nodes = list(nodes)
     return go.Scatter3d(
         x=[node.x for node in nodes],
@@ -149,6 +203,12 @@ def _labels_3d(nodes: Iterable[SceneNode], *, text: str, color: str):
 
 
 def _sphere_wireframe_traces():
+    """Return a list of 3-D line traces forming a faint unit-sphere wireframe.
+
+    Returns:
+        List of :class:`plotly.graph_objects.Scatter3d` traces — one per
+        longitude and latitude ring.
+    """
     traces = []
     longitudes = [-120, -60, 0, 60, 120]
     latitudes = [-60, -30, 0, 30, 60]
@@ -206,7 +266,19 @@ _EYE_Z = 0.9
 
 
 def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figure:
-    """Build an interactive 3D embryo view."""
+    """Build an interactive 3-D embryo visualization from a scene.
+
+    Renders leaf cells on the unit sphere with a faint wireframe, optional
+    sibling edges, and biopsy ring markers when the scene contains a
+    :class:`~scene.SceneBiopsy`.
+
+    Args:
+        scene: Fully built :class:`~scene.EmbryoScene`.
+        title: Figure title shown above the plot.
+
+    Returns:
+        A :class:`plotly.graph_objects.Figure` ready for display or export.
+    """
     figure = go.Figure()
     nodes = [node for node in scene.nodes if node.is_leaf and node.x is not None]
     first = [node for node in nodes if node.in_first_biopsy]
@@ -274,7 +346,19 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
 def make_lineage_figure(
     scene: EmbryoScene, *, title: str = "Lineage tree"
 ) -> go.Figure:
-    """Build a 2D lineage tree view."""
+    """Build a 2-D lineage-tree visualization from a scene.
+
+    Renders every cell as a marker at its ``(lineage_x, generation)`` position
+    with biopsy ring overlays and center labels when the scene contains a
+    :class:`~scene.SceneBiopsy`.
+
+    Args:
+        scene: Fully built :class:`~scene.EmbryoScene`.
+        title: Figure title shown above the plot.
+
+    Returns:
+        A :class:`plotly.graph_objects.Figure` ready for display or export.
+    """
     figure = go.Figure()
     nodes = scene.nodes
     first = [node for node in nodes if node.in_first_biopsy]
