@@ -28,7 +28,7 @@ _AUTOROTATE_JS = """
     var R            = Math.sqrt(1.5 * 1.5 + 1.2 * 1.2);
     var Z_EYE        = 0.9;
     var START_ANGLE  = Math.atan2(1.2, 1.5);
-    var REVOLUTION_MS = 8000;
+    var REVOLUTION_MS = 15000;
     var startTime    = null;
 
     function is3d(gd) {

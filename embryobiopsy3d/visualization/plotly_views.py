@@ -15,7 +15,9 @@ ANEUPLOID_COLOR = "#d62728"
 EUPLOID_FACE = "#ffffff"
 BASE_EDGE = "#222222"
 BIOPSY_1_COLOR = "#1f77b4"
+BIOPSY_1_EUPLOID = "#aec7e8"
 BIOPSY_2_COLOR = "#ff7f0e"
+BIOPSY_2_EUPLOID = "#ffbb78"
 SPHERE_COLOR = "#dddddd"
 EDGE_COLOR = "#c8c8c8"
 SIBLING_COLOR = "#d9d9d9"
@@ -109,27 +111,33 @@ def _points_3d(nodes: Iterable[SceneNode], *, size: float, name: str):
     )
 
 
-def _rings_3d(
+def _points_3d_biopsy(
     nodes: Iterable[SceneNode],
     *,
-    color: str,
+    euploid_color: str,
+    aneuploid_color: str,
     size: float,
     name: str,
-    line_width: float = 12,
 ):
-    """Hollow markers used as biopsy rings; size dominates visibility in 3D."""
+    """Cell markers recolored and enlarged to indicate biopsy membership.
+
+    Aneuploid cells use *aneuploid_color* (darker shade); euploid cells use
+    *euploid_color* (lighter shade of the same hue) so biopsy group and
+    ploidy status are both readable at a glance.
+    """
     nodes = list(nodes)
+    colors = [aneuploid_color if node.is_aneuploid else euploid_color for node in nodes]
     return go.Scatter3d(
         x=[node.x for node in nodes],
         y=[node.y for node in nodes],
         z=[node.z for node in nodes],
         mode="markers",
         name=name,
-        hoverinfo="skip",
+        hovertemplate=[_format_node_hover(node) for node in nodes],
         marker={
             "size": size,
-            "color": "rgba(0,0,0,0)",
-            "line": {"color": color, "width": line_width},
+            "color": colors,
+            "line": {"color": BASE_EDGE, "width": 3},
         },
     )
 
@@ -213,6 +221,8 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
     second = [node for node in nodes if node.in_second_biopsy]
     first_center = [node for node in nodes if node.is_first_center]
     second_center = [node for node in nodes if node.is_second_center]
+    biopsy_ids = {n.id for n in first} | {n.id for n in second}
+    plain = [node for node in nodes if node.id not in biopsy_ids]
 
     for trace in _sphere_wireframe_traces():
         figure.add_trace(trace)
@@ -226,29 +236,26 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
                 opacity=0.5,
             )
         )
-    if nodes:
-        figure.add_trace(_points_3d(nodes, size=6, name="Cells"))
-    # Ring markers must be larger than leaf dots or the 3D outline reads as a hairline.
-    _ring_size = 14
-    _ring_line = 14
+    if plain:
+        figure.add_trace(_points_3d(plain, size=6, name="Cells"))
     if first:
         figure.add_trace(
-            _rings_3d(
+            _points_3d_biopsy(
                 first,
-                color=BIOPSY_1_COLOR,
-                size=_ring_size,
+                euploid_color=BIOPSY_1_EUPLOID,
+                aneuploid_color=BIOPSY_1_COLOR,
+                size=9,
                 name="First biopsy",
-                line_width=_ring_line,
             )
         )
     if second:
         figure.add_trace(
-            _rings_3d(
+            _points_3d_biopsy(
                 second,
-                color=BIOPSY_2_COLOR,
-                size=_ring_size,
+                euploid_color=BIOPSY_2_EUPLOID,
+                aneuploid_color=BIOPSY_2_COLOR,
+                size=9,
                 name="Second biopsy",
-                line_width=_ring_line,
             )
         )
     if first_center:
@@ -375,7 +382,7 @@ def make_lineage_figure(
             "ticktext": [str(max_level - idx) for idx in range(max_level + 1)],
             "range": [-0.2, max_y + 0.2],
         },
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
+        legend={"orientation": "h", "yanchor": "bottom", "y": 0.99},
         plot_bgcolor="white",
     )
     return figure
