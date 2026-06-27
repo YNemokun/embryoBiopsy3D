@@ -5,14 +5,13 @@ Plotly figure builders for embryo visualization scenes.
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from typing import Iterable, Optional
 
 import plotly.graph_objects as go
 
 from .scene import EmbryoScene, SceneNode
 
 ANEUPLOID_COLOR = "#d62728"
-ERRONEOUS_COLOR = "#d62728"  # same red — the X shape distinguishes the role
 EUPLOID_FACE = "#ffffff"
 BASE_EDGE = "#222222"
 BIOPSY_1_COLOR = "#1f77b4"
@@ -23,11 +22,41 @@ SPHERE_COLOR = "#dddddd"
 EDGE_COLOR = "#c8c8c8"
 SIBLING_COLOR = "#d9d9d9"
 
+# Palette for clade coloring — avoids the fixed colors already in use
+# (red = aneuploid, white = euploid, blue = biopsy 1, orange = biopsy 2).
+# Colors cycle if there are more progenitors than palette entries.
+CLADE_PALETTE = [
+    "#2ca02c",  # green
+    "#9467bd",  # purple
+    "#8c564b",  # brown
+    "#e377c2",  # pink
+    "#17becf",  # teal
+    "#bcbd22",  # yellow-green
+    "#393b79",  # indigo
+    "#d95f02",  # burnt orange
+]
+
 # Marker symbol used to flag a cell that divides erroneously (euploid progenitor).
 _ERRONEOUS_SYMBOL_3D = "x"
 _ERRONEOUS_SYMBOL_2D = "x"
 _CIRCLE_3D = "circle"
 _CIRCLE_2D = "circle"
+
+
+def build_clade_colors(scene: EmbryoScene) -> dict[str, str]:
+    """Return a stable progenitor-id → color mapping for clade visualization.
+
+    Colors are assigned in BFS order (root first), so the same progenitor
+    always gets the same color for a given scene regardless of how the
+    function is called.
+    """
+    # scene.nodes is in BFS order; picking divides_erroneously in that order
+    # gives a generation-stable assignment.
+    progenitor_ids = [node.id for node in scene.nodes if node.divides_erroneously]
+    return {
+        pid: CLADE_PALETTE[i % len(CLADE_PALETTE)]
+        for i, pid in enumerate(progenitor_ids)
+    }
 
 
 def _node_symbol_3d(node: SceneNode) -> str:
@@ -38,9 +67,111 @@ def _node_symbol_2d(node: SceneNode) -> str:
     return _ERRONEOUS_SYMBOL_2D if node.divides_erroneously else _CIRCLE_2D
 
 
-def _node_face_color(node: SceneNode) -> str:
-    """Fill color: red for aneuploid, white for euploid (including erroneous progenitor)."""
-    return ANEUPLOID_COLOR if node.is_aneuploid else EUPLOID_FACE
+def _node_face_color(
+    node: SceneNode,
+    clade_colors: Optional[dict[str, str]] = None,
+) -> str:
+    """Resolve the fill color for a node.
+
+    Default mode
+    ------------
+    Aneuploid → ANEUPLOID_COLOR (red); everything else → EUPLOID_FACE (white).
+
+    Clade-color mode  (clade_colors is not None)
+    --------------------------------------------
+    - Erroneous progenitor (×) → its own clade color.
+    - Aneuploid descendant with a known progenitor → that progenitor's clade color.
+    - Aneuploid with no progenitor (meiotic / direct) → ANEUPLOID_COLOR.
+    - Euploid → EUPLOID_FACE.
+    """
+    if clade_colors:
+        if node.divides_erroneously:
+            return clade_colors.get(node.id, ANEUPLOID_COLOR)
+        if node.is_aneuploid and node.error_progenitor:
+            return clade_colors.get(node.error_progenitor, ANEUPLOID_COLOR)
+        if node.is_aneuploid:
+            return ANEUPLOID_COLOR
+    elif node.is_aneuploid:
+        return ANEUPLOID_COLOR
+    return EUPLOID_FACE
+
+
+def _biopsy_face_color(
+    node: SceneNode,
+    euploid_color: str,
+    aneuploid_color: str,
+    clade_colors: Optional[dict[str, str]] = None,
+) -> str:
+    """Biopsy variant: euploid cells keep the biopsy hue; aneuploid cells
+    use the clade color when clade mode is active."""
+    if clade_colors:
+        if node.divides_erroneously:
+            return clade_colors.get(node.id, aneuploid_color)
+        if node.is_aneuploid and node.error_progenitor:
+            return clade_colors.get(node.error_progenitor, aneuploid_color)
+        if node.is_aneuploid:
+            return aneuploid_color
+        return euploid_color
+    return aneuploid_color if node.is_aneuploid else euploid_color
+
+
+def _clade_legend_entries_2d(
+    scene: EmbryoScene, clade_colors: dict[str, str]
+) -> list[go.Scatter]:
+    """Invisible scatter points that inject per-clade entries into the legend."""
+    traces = []
+    # Build a fast id→node lookup for label generation.
+    node_map = {n.id: n for n in scene.nodes}
+    for pid, color in clade_colors.items():
+        prog = node_map.get(pid)
+        label = (
+            f"Clade: gen {prog.generation}, idx {prog.generation_index}"
+            if prog
+            else f"Clade: {pid[:8]}"
+        )
+        traces.append(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker={
+                    "color": color,
+                    "size": 11,
+                    "symbol": "circle",
+                    "line": {"color": BASE_EDGE, "width": 1.5},
+                },
+                name=label,
+                showlegend=True,
+            )
+        )
+    return traces
+
+
+def _clade_legend_entries_3d(
+    scene: EmbryoScene, clade_colors: dict[str, str]
+) -> list[go.Scatter3d]:
+    """Invisible 3-D scatter points that inject per-clade legend entries."""
+    traces = []
+    node_map = {n.id: n for n in scene.nodes}
+    for pid, color in clade_colors.items():
+        prog = node_map.get(pid)
+        label = (
+            f"Clade: gen {prog.generation}, idx {prog.generation_index}"
+            if prog
+            else f"Clade: {pid[:8]}"
+        )
+        traces.append(
+            go.Scatter3d(
+                x=[None],
+                y=[None],
+                z=[None],
+                mode="markers",
+                marker={"color": color, "size": 7, "symbol": "circle"},
+                name=label,
+                showlegend=True,
+            )
+        )
+    return traces
 
 
 def _node_lookup(scene: EmbryoScene) -> dict[str, SceneNode]:
@@ -106,6 +237,8 @@ def _format_node_hover(node: SceneNode) -> str:
         f"index={node.generation_index}",
         status,
     ]
+    if node.error_progenitor:
+        bits.append(f"progenitor={node.error_progenitor[:8]}")
     if node.in_first_biopsy:
         bits.append("biopsy=first")
     if node.in_second_biopsy:
@@ -117,7 +250,13 @@ def _format_node_hover(node: SceneNode) -> str:
     return "<br>".join(bits)
 
 
-def _points_3d(nodes: Iterable[SceneNode], *, size: float, name: str):
+def _points_3d(
+    nodes: Iterable[SceneNode],
+    *,
+    size: float,
+    name: str,
+    clade_colors: Optional[dict[str, str]] = None,
+):
     nodes = list(nodes)
     return go.Scatter3d(
         x=[node.x for node in nodes],
@@ -129,7 +268,7 @@ def _points_3d(nodes: Iterable[SceneNode], *, size: float, name: str):
         marker={
             "size": size,
             "symbol": [_node_symbol_3d(node) for node in nodes],
-            "color": [_node_face_color(node) for node in nodes],
+            "color": [_node_face_color(node, clade_colors) for node in nodes],
             "line": {"color": BASE_EDGE, "width": 2},
         },
     )
@@ -142,16 +281,19 @@ def _points_3d_biopsy(
     aneuploid_color: str,
     size: float,
     name: str,
+    clade_colors: Optional[dict[str, str]] = None,
 ):
     """Cell markers recolored and enlarged to indicate biopsy membership.
 
-    Aneuploid cells use *aneuploid_color* (darker shade); euploid cells use
-    *euploid_color* (lighter shade of the same hue) so biopsy group and
-    ploidy status are both readable at a glance.  Erroneous-division progenitors
-    are drawn as × with the euploid color (they are themselves euploid).
+    In default mode, aneuploid cells use *aneuploid_color* and euploid cells use
+    *euploid_color*.  In clade mode, aneuploid cells are colored by their clade
+    while euploid cells retain *euploid_color* (the biopsy hue).
     """
     nodes = list(nodes)
-    colors = [aneuploid_color if node.is_aneuploid else euploid_color for node in nodes]
+    colors = [
+        _biopsy_face_color(node, euploid_color, aneuploid_color, clade_colors)
+        for node in nodes
+    ]
     return go.Scatter3d(
         x=[node.x for node in nodes],
         y=[node.y for node in nodes],
@@ -239,8 +381,22 @@ _EYE_Y0 = 1.2
 _EYE_Z = 0.9
 
 
-def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figure:
-    """Build an interactive 3D embryo view."""
+def make_embryo_figure(
+    scene: EmbryoScene,
+    *,
+    title: str = "Embryo",
+    clade_colors: Optional[dict[str, str]] = None,
+) -> go.Figure:
+    """Build an interactive 3D embryo view.
+
+    Parameters
+    ----------
+    clade_colors : dict or None
+        When provided (use :func:`build_clade_colors` to create it), each
+        aneuploid clade is rendered in a distinct color so independent mitotic
+        errors can be counted visually.  Pass ``None`` for the default red/white
+        scheme.
+    """
     figure = go.Figure()
     nodes = [node for node in scene.nodes if node.is_leaf and node.x is not None]
     first = [node for node in nodes if node.in_first_biopsy]
@@ -263,7 +419,9 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
             )
         )
     if plain:
-        figure.add_trace(_points_3d(plain, size=6, name="Cells"))
+        figure.add_trace(
+            _points_3d(plain, size=6, name="Cells", clade_colors=clade_colors)
+        )
     if first:
         figure.add_trace(
             _points_3d_biopsy(
@@ -272,6 +430,7 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
                 aneuploid_color=BIOPSY_1_COLOR,
                 size=9,
                 name="First biopsy",
+                clade_colors=clade_colors,
             )
         )
     if second:
@@ -282,16 +441,20 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
                 aneuploid_color=BIOPSY_2_COLOR,
                 size=9,
                 name="Second biopsy",
+                clade_colors=clade_colors,
             )
         )
     if first_center:
         figure.add_trace(_labels_3d(first_center, text="1", color=BIOPSY_1_COLOR))
     if second_center:
         figure.add_trace(_labels_3d(second_center, text="2", color=BIOPSY_2_COLOR))
+    if clade_colors:
+        for trace in _clade_legend_entries_3d(scene, clade_colors):
+            figure.add_trace(trace)
 
     figure.update_layout(
         title=title,
-        margin={"l": 0, "r": 0, "b": 0, "t": 45},
+        margin={"l": 0, "r": 0, "b": 120 if clade_colors else 0, "t": 45},
         scene={
             "xaxis": {"visible": False, "range": [-1.15, 1.15]},
             "yaxis": {"visible": False, "range": [-1.15, 1.15]},
@@ -299,15 +462,35 @@ def make_embryo_figure(scene: EmbryoScene, *, title: str = "Embryo") -> go.Figur
             "aspectmode": "cube",
             "camera": {"eye": {"x": _EYE_X0, "y": _EYE_Y0, "z": _EYE_Z}},
         },
-        legend={"orientation": "h", "yanchor": "bottom", "y": 0.01},
+        legend=(
+            {
+                "orientation": "h",
+                "yanchor": "top",
+                "y": -0.02,
+                "xanchor": "center",
+                "x": 0.5,
+            }
+            if clade_colors
+            else {"orientation": "h", "yanchor": "bottom", "y": 0.01}
+        ),
     )
     return figure
 
 
 def make_lineage_figure(
-    scene: EmbryoScene, *, title: str = "Lineage tree"
+    scene: EmbryoScene,
+    *,
+    title: str = "Lineage tree",
+    clade_colors: Optional[dict[str, str]] = None,
 ) -> go.Figure:
-    """Build a 2D lineage tree view."""
+    """Build a 2D lineage tree view.
+
+    Parameters
+    ----------
+    clade_colors : dict or None
+        When provided, each aneuploid clade is rendered in a distinct color.
+        Build via :func:`build_clade_colors`.
+    """
     figure = go.Figure()
     nodes = scene.nodes
     first = [node for node in nodes if node.in_first_biopsy]
@@ -332,11 +515,14 @@ def make_lineage_figure(
             marker={
                 "size": [11 if node.is_leaf else 9 for node in nodes],
                 "symbol": [_node_symbol_2d(node) for node in nodes],
-                "color": [_node_face_color(node) for node in nodes],
+                "color": [_node_face_color(node, clade_colors) for node in nodes],
                 "line": {"color": BASE_EDGE, "width": 1.5},
             },
         )
     )
+    if clade_colors:
+        for trace in _clade_legend_entries_2d(scene, clade_colors):
+            figure.add_trace(trace)
 
     if first:
         figure.add_trace(
@@ -397,7 +583,7 @@ def make_lineage_figure(
     max_level = int(round(max_y))
     figure.update_layout(
         title=title,
-        margin={"l": 10, "r": 10, "b": 10, "t": 45},
+        margin={"l": 10, "r": 10, "b": 120 if clade_colors else 10, "t": 45},
         xaxis={"visible": False},
         yaxis={
             "title": "Generation",
@@ -406,7 +592,17 @@ def make_lineage_figure(
             "ticktext": [str(max_level - idx) for idx in range(max_level + 1)],
             "range": [-0.2, max_y + 0.2],
         },
-        legend={"orientation": "h", "yanchor": "bottom", "y": 0.99},
+        legend=(
+            {
+                "orientation": "h",
+                "yanchor": "top",
+                "y": -0.05,
+                "xanchor": "center",
+                "x": 0.5,
+            }
+            if clade_colors
+            else {"orientation": "h", "yanchor": "bottom", "y": 0.99}
+        ),
         plot_bgcolor="white",
     )
     return figure
