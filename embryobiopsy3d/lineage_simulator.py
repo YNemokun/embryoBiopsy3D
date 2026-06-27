@@ -52,6 +52,9 @@ class Embryo:
     mutated_cells: Optional[list["Cell"]] = (
         None  # aneuploid cells that need to be reset to euploid
     )
+    error_progenitors: Optional[list["Cell"]] = (
+        None  # cells that will divide erroneously
+    )
     id_dict: Optional[dict[str, "Cell"]] = None  # fast lookup by UUID
     generation_layers: Optional[list[list["Cell"]]] = None  # index leaves by generation
 
@@ -71,6 +74,16 @@ class Embryo:
             ]
         return affected
 
+    def _record_erroneous_progenitor(
+        self, progenitor: "Cell", is_aneuploid: bool
+    ) -> None:
+        """Keep error_progenitors in sync with manual flag updates."""
+        if self.error_progenitors is None:
+            self.error_progenitors = []
+        if is_aneuploid:
+            if progenitor not in self.error_progenitors:
+                self.error_progenitors.append(progenitor)
+
     def get_node_by_id(self, node_id: str) -> "Cell":
         """Return the node matching the given id."""
         if not self.id_dict:
@@ -82,13 +95,28 @@ class Embryo:
         node_id: str,
         is_aneuploid: bool = True,
         include_subtree: bool = True,
+        *,
+        erroneous_division: bool = False,
     ) -> list["Cell"]:
-        """Set aneuploid status for a node id, optionally including its subtree."""
+        """Set aneuploid status for a node id, optionally including its subtree.
+
+        Parameters
+        ----------
+        erroneous_division : bool
+            Keyword-only.  When True, the node itself stays euploid but its
+            division misfires — only descendants are (un)marked aneuploid and
+            the node is flagged ``divides_erroneously``.
+        """
         node = self.get_node_by_id(node_id)
         if node is None:
             raise ValueError(f"Node id not found: {node_id!r}")
-        affected = node.set_aneuploid(is_aneuploid, include_subtree)
-        return self._record_affected_cells(affected, is_aneuploid)
+        affected = node.set_aneuploid(
+            is_aneuploid, include_subtree, erroneous_division=erroneous_division
+        )
+        self._record_affected_cells(affected, is_aneuploid)
+        if erroneous_division:
+            self._record_erroneous_progenitor(node, is_aneuploid)
+        return affected
 
     def get_node_by_generation_index(self, generation: int, index: int) -> "Cell":
         """Return the node at generation_layers[generation][index]."""
@@ -107,11 +135,26 @@ class Embryo:
         index: int,
         is_aneuploid: bool = True,
         include_subtree: bool = True,
+        *,
+        erroneous_division: bool = False,
     ) -> list["Cell"]:
-        """Set aneuploid status for a (generation, index) node, optionally its subtree."""
+        """Set aneuploid status for a (generation, index) node, optionally its subtree.
+
+        Parameters
+        ----------
+        erroneous_division : bool
+            Keyword-only.  When True, the node itself stays euploid but its
+            division misfires — only descendants are (un)marked aneuploid and
+            the node is flagged ``divides_erroneously``.
+        """
         node = self.get_node_by_generation_index(generation, index)
-        affected = node.set_aneuploid(is_aneuploid, include_subtree)
-        return self._record_affected_cells(affected, is_aneuploid)
+        affected = node.set_aneuploid(
+            is_aneuploid, include_subtree, erroneous_division=erroneous_division
+        )
+        self._record_affected_cells(affected, is_aneuploid)
+        if erroneous_division:
+            self._record_erroneous_progenitor(node, is_aneuploid)
+        return affected
 
 
 class Cell:
@@ -128,38 +171,72 @@ class Cell:
         self.layer_position = (
             None  # Radian, for calculating cell placement during construction
         )
-        self.is_dead = False  # For early cell deaths (To be implemented)
+        self.divides_erroneously = False  # its following division will have an error, causing two aneuploid daughter cells
         self.is_aneuploid = False  # default to euploid
+        self.error_progenitor = (
+            None  # the ancestor cell whose division causes the aneuploidy in the tree
+        )
 
     def __repr__(self):  # for debug, changing the print behavior
         return (
             f"\n Cell(id={self.id[:8]}, "
             f"gen={self.generation}, "
             f"aneuploid={self.is_aneuploid}, "
-            f"dead = {self.is_dead},"
+            f"divides_erroneously={self.divides_erroneously}, "
+            f"error_progenitor={self.error_progenitor}, "
             f"pos={self.position}, "
             f"layer_pos={self.layer_position})"
         )
 
     def set_aneuploid(
-        self, is_aneuploid: bool = True, include_subtree: bool = True
+        self,
+        is_aneuploid: bool = True,
+        include_subtree: bool = True,
+        *,
+        erroneous_division: bool = False,
     ) -> list["Cell"]:
-        """Set aneuploid status on this cell (optionally its subtree)."""
+        """Set or clear aneuploid status on this cell.
+
+        Parameters
+        ----------
+        is_aneuploid : bool
+            True to mark as aneuploid; False to revert to euploid.
+        include_subtree : bool
+            When ``erroneous_division=False`` (the default):
+            True  → mark this cell *and* all descendants (original behaviour).
+            False → mark only this single cell with no propagation.
+            Ignored when ``erroneous_division=True``.
+        erroneous_division : bool
+            Keyword-only.  When True, *this* cell is euploid but its division
+            misfires — all descendants are (un)marked aneuploid and the cell
+            is flagged ``divides_erroneously``.  The cell itself is never added
+            to the affected list.  Use this to distinguish a mitotic error
+            (erroneous division) from a pre-existing aneuploid cell.
+        """
         affected = []
-        if include_subtree:
-            # Breadth-first aneuploidy change through descendants.
+        if erroneous_division:
+            # Progenitor cell stays euploid; its division propagates the error.
+            self.divides_erroneously = is_aneuploid
+            queue = deque(self.children)
+            while queue:
+                node = queue.popleft()
+                node.is_aneuploid = is_aneuploid
+                node.error_progenitor = self.id if is_aneuploid else None
+                affected.append(node)
+                queue.extend(node.children)
+        elif include_subtree:
+            # Original behaviour: this cell itself is aneuploid and propagates.
             queue = deque([self])
             while queue:
                 node = queue.popleft()
                 node.is_aneuploid = is_aneuploid
                 affected.append(node)
-                # Continue traversal into children.
                 queue.extend(node.children)
         else:
-            # Just update the current cell
+            # Single-cell assignment only, no propagation.
             self.is_aneuploid = is_aneuploid
+            self.error_progenitor = None
             affected.append(self)
-        # return the list of mutated cells
         return affected
 
 
@@ -284,52 +361,81 @@ def apply_error_rates(
     meio_rate: float,
     mito_rate: float,
     rng: Optional[np.random.Generator] = None,
+    *,
+    error_progenitors: Optional[list["Cell"]] = None,
 ) -> list["Cell"]:
-    """Randomly assign meiotic/mitotic errors on an existing tree structure (BFS)."""
+    """Randomly assign meiotic/mitotic errors on an existing tree structure (BFS).
+
+    Parameters
+    ----------
+    error_progenitors : list[Cell] or None
+        If provided, cells whose division fires a mitotic error are appended
+        to this list so callers can reset ``divides_erroneously`` later.
+        Passing ``None`` (default) skips that bookkeeping.
+    """
     rng = _ensure_rng(rng)
-    # for easy reset
     mutated_cells = []
 
-    # apply meiotic error rate
+    # Meiotic error: the egg/sperm was already aneuploid — flag the root.
     if rng.random() < meio_rate:
         root.is_aneuploid = True
 
-    # Traverse all nodes to propagate inherited and new mitotic errors.
+    # BFS to propagate inherited and new mitotic errors.
     queue = deque([root])
-    # breadth-first search through the tree
     while queue:
         cell = queue.popleft()
-        # skip if this is a leaf node
+
         if not cell.children:
-            # Keep track of mutated leaves for downstream reset.
+            # Leaf node — record if aneuploid so it can be reset later.
             if cell.is_aneuploid:
                 mutated_cells.append(cell)
             continue
 
-        # apply mitotic error rate
+        # Stochastic mitotic error: this cell is euploid but divides wrongly.
         if rng.random() < mito_rate:
-            cell.is_aneuploid = True
-        # extend its aneuploid status to its children
-        if cell.is_aneuploid:
-            mutated_cells.append(cell)
-            # Children inherit parent aneuploid status
+            cell.divides_erroneously = True
+            if error_progenitors is not None:
+                error_progenitors.append(cell)
+
+        if cell.is_aneuploid or cell.divides_erroneously:
+            progenitor = cell.id if cell.divides_erroneously else cell.error_progenitor
+            # only add the cell to the mutated cells if it is aneuploid
+            if cell.is_aneuploid:
+                mutated_cells.append(cell)
+            # Children are all aneuploid
             for child in cell.children:
                 child.is_aneuploid = True
+                # Track which erroneous division caused the child's aneuploidy.
+                child.error_progenitor = progenitor
 
-        # add its children to the queue
         queue.extend(cell.children)
 
     return mutated_cells
 
 
-def reset_flags(mutated_cells: list["Cell"]) -> None:
-    """Reset aneuploid flags on the provided cells."""
-    if not mutated_cells:
-        return None
+def reset_flags(
+    mutated_cells: list["Cell"],
+    error_progenitors: Optional[list["Cell"]] = None,
+) -> None:
+    """Reset aneuploid flags and erroneous-division metadata.
+
+    Parameters
+    ----------
+    mutated_cells : list[Cell]
+        Aneuploid cells to clear.  ``is_aneuploid`` and ``error_progenitor``
+        are both reset so plotting metadata does not go stale.
+    error_progenitors : list[Cell] or None
+        Cells that were flagged ``divides_erroneously`` during the same trial.
+        If provided, their flag is cleared so the next trial starts clean.
+    """
     for cell in mutated_cells:
         cell.is_aneuploid = False
+        cell.error_progenitor = None
     mutated_cells.clear()
-    return None
+    if error_progenitors is not None:
+        for cell in error_progenitors:
+            cell.divides_erroneously = False
+        error_progenitors.clear()
 
 
 def generate_tree(
@@ -704,6 +810,7 @@ def build_embryo(
     have_tree = root is not None and leaves is not None and sibling_pairs is not None
     generation_rng = None
     mutated_cells = []
+    error_progenitors: list["Cell"] = []
 
     # Build the tree if none was provided.
     if not have_tree:
@@ -719,7 +826,9 @@ def build_embryo(
             generations=generations,
             include_metadata=True,
         )
-        mutated_cells = apply_error_rates(root, meio_rate, mito_rate, rng)
+        mutated_cells = apply_error_rates(
+            root, meio_rate, mito_rate, rng, error_progenitors=error_progenitors
+        )
         generation_rng = rng
     else:
         # tree already provided, skips tree generation and error rate application
@@ -745,6 +854,7 @@ def build_embryo(
         placement_dispersal=placement_dispersal,
         generation_rng=generation_rng,
         mutated_cells=mutated_cells,
+        error_progenitors=error_progenitors,
         id_dict=id_dict,
         generation_layers=generation_layers,
     )
