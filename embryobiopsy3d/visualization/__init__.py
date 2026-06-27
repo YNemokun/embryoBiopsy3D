@@ -7,6 +7,7 @@ from .scene import (
     build_demo_scene,
     build_embryo_scene,
     scene_leaf_rows,
+    scene_progenitor_rows,
     scene_summary_rows,
     serialize_scene,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "build_demo_scene",
     "build_embryo_scene",
     "scene_leaf_rows",
+    "scene_progenitor_rows",
     "scene_summary_rows",
     "serialize_scene",
 ]

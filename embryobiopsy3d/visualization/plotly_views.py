@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 from .scene import EmbryoScene, SceneNode
 
 ANEUPLOID_COLOR = "#d62728"
+ERRONEOUS_COLOR = "#d62728"  # same red — the X shape distinguishes the role
 EUPLOID_FACE = "#ffffff"
 BASE_EDGE = "#222222"
 BIOPSY_1_COLOR = "#1f77b4"
@@ -21,6 +22,25 @@ BIOPSY_2_EUPLOID = "#ffbb78"
 SPHERE_COLOR = "#dddddd"
 EDGE_COLOR = "#c8c8c8"
 SIBLING_COLOR = "#d9d9d9"
+
+# Marker symbol used to flag a cell that divides erroneously (euploid progenitor).
+_ERRONEOUS_SYMBOL_3D = "x"
+_ERRONEOUS_SYMBOL_2D = "x"
+_CIRCLE_3D = "circle"
+_CIRCLE_2D = "circle"
+
+
+def _node_symbol_3d(node: SceneNode) -> str:
+    return _ERRONEOUS_SYMBOL_3D if node.divides_erroneously else _CIRCLE_3D
+
+
+def _node_symbol_2d(node: SceneNode) -> str:
+    return _ERRONEOUS_SYMBOL_2D if node.divides_erroneously else _CIRCLE_2D
+
+
+def _node_face_color(node: SceneNode) -> str:
+    """Fill color: red for aneuploid, white for euploid (including erroneous progenitor)."""
+    return ANEUPLOID_COLOR if node.is_aneuploid else EUPLOID_FACE
 
 
 def _node_lookup(scene: EmbryoScene) -> dict[str, SceneNode]:
@@ -74,7 +94,12 @@ def _edge_trace_2d(
 
 
 def _format_node_hover(node: SceneNode) -> str:
-    status = "aneuploid" if node.is_aneuploid else "euploid"
+    if node.divides_erroneously:
+        status = "euploid — divides erroneously"
+    elif node.is_aneuploid:
+        status = "aneuploid"
+    else:
+        status = "euploid"
     bits = [
         f"id={node.id[:8]}",
         f"generation={node.generation}",
@@ -103,9 +128,8 @@ def _points_3d(nodes: Iterable[SceneNode], *, size: float, name: str):
         hovertemplate=[_format_node_hover(node) for node in nodes],
         marker={
             "size": size,
-            "color": [
-                ANEUPLOID_COLOR if node.is_aneuploid else EUPLOID_FACE for node in nodes
-            ],
+            "symbol": [_node_symbol_3d(node) for node in nodes],
+            "color": [_node_face_color(node) for node in nodes],
             "line": {"color": BASE_EDGE, "width": 2},
         },
     )
@@ -123,7 +147,8 @@ def _points_3d_biopsy(
 
     Aneuploid cells use *aneuploid_color* (darker shade); euploid cells use
     *euploid_color* (lighter shade of the same hue) so biopsy group and
-    ploidy status are both readable at a glance.
+    ploidy status are both readable at a glance.  Erroneous-division progenitors
+    are drawn as × with the euploid color (they are themselves euploid).
     """
     nodes = list(nodes)
     colors = [aneuploid_color if node.is_aneuploid else euploid_color for node in nodes]
@@ -136,6 +161,7 @@ def _points_3d_biopsy(
         hovertemplate=[_format_node_hover(node) for node in nodes],
         marker={
             "size": size,
+            "symbol": [_node_symbol_3d(node) for node in nodes],
             "color": colors,
             "line": {"color": BASE_EDGE, "width": 3},
         },
@@ -305,10 +331,8 @@ def make_lineage_figure(
             hovertemplate=[_format_node_hover(node) for node in nodes],
             marker={
                 "size": [11 if node.is_leaf else 9 for node in nodes],
-                "color": [
-                    ANEUPLOID_COLOR if node.is_aneuploid else EUPLOID_FACE
-                    for node in nodes
-                ],
+                "symbol": [_node_symbol_2d(node) for node in nodes],
+                "color": [_node_face_color(node) for node in nodes],
                 "line": {"color": BASE_EDGE, "width": 1.5},
             },
         )

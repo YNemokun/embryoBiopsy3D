@@ -15,6 +15,7 @@ from embryobiopsy3d.visualization.plotly_views import (
 from embryobiopsy3d.visualization.scene import (
     build_demo_scene,
     scene_leaf_rows,
+    scene_progenitor_rows,
     scene_summary_rows,
     serialize_scene,
 )
@@ -192,6 +193,19 @@ def _show_tables(scene):
         st.dataframe(
             pd.DataFrame(scene_leaf_rows(scene)), hide_index=True, width="stretch"
         )
+
+    progenitor_rows = scene_progenitor_rows(scene)
+    if progenitor_rows:
+        st.subheader(
+            f"Erroneous-division progenitors  ({len(progenitor_rows)} cell"
+            f"{'s' if len(progenitor_rows) != 1 else ''})"
+        )
+        st.caption(
+            "Each row is a euploid cell (marked ×) whose division misfired, "
+            "making all its descendants aneuploid.  "
+            "'aneuploid_descendants' counts every affected node in the subtree."
+        )
+        st.dataframe(pd.DataFrame(progenitor_rows), hide_index=True, width="stretch")
 
 
 def main():
