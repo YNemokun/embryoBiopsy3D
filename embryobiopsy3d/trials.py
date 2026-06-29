@@ -51,7 +51,12 @@ TRIAL_FIELDNAMES = [
 
 
 def _clear_tree_state(generation_layers: list[list]) -> None:
-    """Clear aneuploid flags and cached positions before a new trial."""
+    """Reset aneuploid flags and cached sphere positions on every node in the tree.
+
+    Args:
+        generation_layers: Layer list from :func:`~lineage_simulator.generate_tree`
+            containing all cells grouped by generation.
+    """
     for layer in generation_layers:
         for node in layer:
             node.is_aneuploid = False
@@ -60,13 +65,30 @@ def _clear_tree_state(generation_layers: list[list]) -> None:
 
 
 def _aneuploid_leaf_count(total_generations: int, generation_index: int) -> int:
-    """Return the number of aneuploid leaves in the marked subtree."""
+    """Return how many leaves are descended from the aneuploid subtree root.
+
+    An error injected at *generation_index* propagates to
+    ``2 ** (total_generations - generation_index)`` leaves.
+
+    Args:
+        total_generations: Total number of division rounds in the tree.
+        generation_index: Generation at which the error is introduced.
+
+    Returns:
+        Number of aneuploid leaf cells.
+    """
     # error at generation g produces 2^(8-g) aneuploid leaves
     return 2 ** (total_generations - generation_index)
 
 
 def _save_csv(path: str, rows: list[dict]) -> None:
-    """Save rows to CSV."""
+    """Write *rows* to a CSV file at *path*.
+
+    Args:
+        path: Filesystem path for the output file.
+        rows: List of dicts with identical keys (used as column headers).
+            An empty file is written when *rows* is empty.
+    """
     if not rows:
         # write file so consumers see a real path.
         with open(path, "w", encoding="utf-8") as handle:
@@ -84,14 +106,30 @@ def _build_summary_rows_from_counts(
     standard_totals: dict,
     group_totals: dict,
 ) -> list[dict]:
-    """
-    Build the grouped 3x3 conditional probability summary from running counts.
+    """Build the 3×3 conditional-probability summary table from running trial counts.
 
-    For each (division, dispersal, distance), this returns the full 3x3 table over:
-    - standard biopsy category
-    - second biopsy category
+    For each ``(division, dispersal, distance)`` group returns all 9 combinations
+    of ``(standard_category, second_category)`` with their conditional and joint
+    probabilities:
 
-    P(second_category | standard_category, division, dispersal, distance)
+    ``P(second_category | standard_category, division, dispersal, distance)``
+
+    Args:
+        transition_counts: Keys are
+            ``(division, cell_index, leaf_count, dispersal, distance,
+            standard_category, second_category)``; values are counts.
+        standard_totals: Keys are the 6-tuple without the second category;
+            values are counts of trials with that first-biopsy category.
+        group_totals: Keys are the 5-tuple
+            ``(division, cell_index, leaf_count, dispersal, distance)``;
+            values are total trial counts for that group.
+
+    Returns:
+        List of summary dicts with fields ``division``, ``cell_index``,
+        ``aneuploid_leaf_count``, ``dispersal``, ``distance``, ``n_trials``,
+        ``standard_category``, ``second_category``, ``transition_count``,
+        ``standard_total``, ``conditional_probability``, and
+        ``joint_probability``.
     """
     summary_rows = []
     # group_totals: one count per (division, cell, leaf count, dispersal, distance).
@@ -147,7 +185,34 @@ def run_analysis(
     cell_index: int = DEFAULT_CELL_INDEX,
     out_dir: str = DEFAULT_OUT_DIR,
 ) -> tuple[list[dict], list[dict]]:
-    """Generate all trial rows and the grouped transition summary."""
+    """Run the full trial sweep and write per-trial and summary CSVs.
+
+    For each combination of ``(generation_index, dispersal, distance)`` the
+    tree is re-positioned, the chosen cell is marked aneuploid, then
+    *n_trials* paired biopsies are simulated.
+
+    Args:
+        generations: Number of cell-division generations.
+        n_trials: Replicates per ``(generation_index, dispersal, distance)`` cell.
+        generation_index_values: Which generation indices to sweep.  Defaults
+            to ``DEFAULT_GENERATION_INDEX_VALUES`` when ``None``.
+        dispersal_values: Placement dispersal values to sweep.  Defaults to
+            ``DEFAULT_DISPERSAL_VALUES`` when ``None``.
+        distance_values: Target biopsy distances (fraction of π) to sweep.
+            Defaults to ``DEFAULT_DISTANCE_VALUES`` when ``None``.
+        base_seed: Seed for the master RNG that derives per-trial seeds.
+        cell_index: Which cell within each generation layer to mark aneuploid.
+        out_dir: Directory for output CSVs (created if absent).
+
+    Returns:
+        A tuple ``([], summary_rows)`` where *summary_rows* is the list of
+        3×3 transition-probability dicts also written to the summary CSV.
+
+    Raises:
+        ValueError: For invalid parameter values (non-positive *generations*
+            or *n_trials*, negative *cell_index*, empty sweep lists, out-of-range
+            generation indices / dispersal / distance values).
+    """
     if generation_index_values is None:
         generation_index_values = list(DEFAULT_GENERATION_INDEX_VALUES)
     if dispersal_values is None:
@@ -302,7 +367,7 @@ def run_analysis(
 
 
 def run_with_defaults() -> None:
-    """Run ``run_analysis`` with the module's default parameter grid."""
+    """Run :func:`run_analysis` with the module's default parameter grid and report elapsed time."""
     start = time.perf_counter()
     run_analysis()
     elapsed_seconds = time.perf_counter() - start

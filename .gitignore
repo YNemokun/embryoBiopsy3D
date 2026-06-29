@@ -9,6 +9,7 @@ __pycache__/
 .mypy_cache/
 .coverage
 htmlcov/
+coverage.json
 
 # Build artifacts
 build/
@@ -26,6 +27,7 @@ venv/
 .vscode/
 *.swp
 *.swo
+CLAUDE.md
 
 # Local / secrets
 .env
