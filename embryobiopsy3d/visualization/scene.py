@@ -37,6 +37,11 @@ class SceneNode:
     in_second_biopsy: bool = False
     is_first_center: bool = False
     is_second_center: bool = False
+    # True when the cell is euploid but its division produced aneuploid daughters.
+    divides_erroneously: bool = False
+    # UUID of the ancestor whose erroneous division caused this cell's aneuploidy;
+    # None for euploid cells and for cells that are aneuploid for other reasons.
+    error_progenitor: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -285,6 +290,8 @@ def build_embryo_scene(
                 in_second_biopsy=node.id in second_ids,
                 is_first_center=node.id == first_center_id,
                 is_second_center=node.id == second_center_id,
+                divides_erroneously=bool(getattr(node, "divides_erroneously", False)),
+                error_progenitor=getattr(node, "error_progenitor", None) or None,
             )
         )
 
@@ -305,6 +312,9 @@ def build_embryo_scene(
             "leaf_count": len(embryo.leaves),
             "aneuploid_nodes": sum(node.is_aneuploid for node in nodes),
             "aneuploid_leaves": sum(leaf.is_aneuploid for leaf in embryo.leaves),
+            "erroneous_division_nodes": sum(
+                bool(getattr(node, "divides_erroneously", False)) for node in nodes
+            ),
         }
     )
 
@@ -339,6 +349,11 @@ def scene_summary_rows(scene: EmbryoScene) -> list[dict[str, Any]]:
         {"metric": "aneuploid_leaves", "value": scene.metadata.get("aneuploid_leaves")},
         {"metric": "total_nodes", "value": scene.metadata.get("total_nodes")},
         {"metric": "aneuploid_nodes", "value": scene.metadata.get("aneuploid_nodes")},
+        # Erroneous-division progenitors (euploid cells whose division misfired).
+        {
+            "metric": "erroneous_division_nodes",
+            "value": scene.metadata.get("erroneous_division_nodes", 0),
+        },
     ]
     if scene.metadata.get("error_mode") == "random":
         rows.extend(
@@ -403,17 +418,56 @@ def scene_leaf_rows(scene: EmbryoScene) -> list[dict[str, Any]]:
             continue
         rows.append(
             {
-                "id": node.id,
+                "id": node.id[:8],
                 "generation": node.generation,
                 "generation_index": node.generation_index,
+                "is_aneuploid": node.is_aneuploid,
+                # Which erroneous division produced this cell's aneuploidy, if any.
+                "error_progenitor_id": (
+                    node.error_progenitor[:8] if node.error_progenitor else ""
+                ),
                 "x": node.x,
                 "y": node.y,
                 "z": node.z,
-                "is_aneuploid": node.is_aneuploid,
                 "first_biopsy": node.in_first_biopsy,
                 "second_biopsy": node.in_second_biopsy,
                 "first_center": node.is_first_center,
                 "second_center": node.is_second_center,
             }
         )
+    return rows
+
+
+def scene_progenitor_rows(scene: EmbryoScene) -> list[dict[str, Any]]:
+    """Return one row per erroneous-division progenitor node.
+
+    A progenitor is a euploid internal cell whose division misfired, making
+    all its descendants aneuploid.  This table is useful for counting how many
+    independent mitotic errors occurred and at which generation each arose.
+    """
+    # Build a fast lookup: progenitor_id → how many aneuploid descendants it caused.
+    descendant_counts: dict[str, int] = {}
+    for node in scene.nodes:
+        if node.error_progenitor:
+            descendant_counts[node.error_progenitor] = (
+                descendant_counts.get(node.error_progenitor, 0) + 1
+            )
+
+    rows = []
+    for node in scene.nodes:
+        if not node.divides_erroneously:
+            continue
+        rows.append(
+            {
+                "id": node.id[:8],
+                "generation": node.generation,
+                "generation_index": node.generation_index,
+                # Number of aneuploid cells (at any depth) descended from this error.
+                "aneuploid_descendants": descendant_counts.get(node.id, 0),
+                "lineage_x": round(node.lineage_x, 3),
+                "lineage_y": round(node.lineage_y, 3),
+            }
+        )
+    # Sort by generation so earlier errors appear first.
+    rows.sort(key=lambda r: (r["generation"], r["generation_index"]))
     return rows

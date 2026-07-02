@@ -9,12 +9,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from embryobiopsy3d.visualization.plotly_views import (
+    build_clade_colors,
     make_embryo_figure,
     make_lineage_figure,
 )
 from embryobiopsy3d.visualization.scene import (
     build_demo_scene,
     scene_leaf_rows,
+    scene_progenitor_rows,
     scene_summary_rows,
     serialize_scene,
 )
@@ -137,6 +139,16 @@ def _sidebar_controls() -> dict:
 
     st.sidebar.header("Display")
     autorotate = st.sidebar.checkbox("Auto-spin sphere", value=False)
+    color_by_clade = st.sidebar.checkbox(
+        "Color by clade (mitotic errors)",
+        value=False,
+        help=(
+            "Each aneuploid clade — a group of cells sharing the same erroneous "
+            "division as their origin — is shown in a distinct color.  The × marker "
+            "on the progenitor cell carries the same color.  Counting distinct colors "
+            "in any generation tells you how many independent mitotic errors occurred."
+        ),
+    )
 
     st.sidebar.header("Placement and sampling")
     placement_seed = st.sidebar.number_input("Placement seed", value=7, step=1)
@@ -163,21 +175,34 @@ def _sidebar_controls() -> dict:
         "rebiopsy_distance": rebiopsy_distance,
         "biopsy_seed": int(biopsy_seed),
         "autorotate": autorotate,
+        "color_by_clade": color_by_clade,
     }
 
 
-def _show_scene(scene, *, title_prefix: str, autorotate: bool = False):
+def _show_scene(
+    scene,
+    *,
+    title_prefix: str,
+    autorotate: bool = False,
+    clade_colors: dict | None = None,
+):
     left, right = st.columns([1.0, 1.2])
     with left:
         st.plotly_chart(
-            make_embryo_figure(scene, title=f"{title_prefix}: embryo"),
+            make_embryo_figure(
+                scene, title=f"{title_prefix}: embryo", clade_colors=clade_colors
+            ),
             width="stretch",
         )
         if autorotate:
             _inject_autorotate_js()
     with right:
         st.plotly_chart(
-            make_lineage_figure(scene, title=f"{title_prefix}: lineage tree"),
+            make_lineage_figure(
+                scene,
+                title=f"{title_prefix}: lineage tree",
+                clade_colors=clade_colors,
+            ),
             width="stretch",
         )
 
@@ -193,6 +218,19 @@ def _show_tables(scene):
             pd.DataFrame(scene_leaf_rows(scene)), hide_index=True, width="stretch"
         )
 
+    progenitor_rows = scene_progenitor_rows(scene)
+    if progenitor_rows:
+        st.subheader(
+            f"Erroneous-division progenitors  ({len(progenitor_rows)} cell"
+            f"{'s' if len(progenitor_rows) != 1 else ''})"
+        )
+        st.caption(
+            "Each row is a euploid cell (marked ×) whose division misfired, "
+            "making all its descendants aneuploid.  "
+            "'aneuploid_descendants' counts every affected node in the subtree."
+        )
+        st.dataframe(pd.DataFrame(progenitor_rows), hide_index=True, width="stretch")
+
 
 def main():
     st.title("embryoBiopsy3D visualization demo")
@@ -203,6 +241,8 @@ def main():
 
     controls = _sidebar_controls()
     autorotate = controls.pop("autorotate")
+    color_by_clade = controls.pop("color_by_clade")
+
     construction_scene = build_demo_scene(
         generations=controls["generations"],
         dispersal=controls["dispersal"],
@@ -217,18 +257,32 @@ def main():
     )
     rebiopsy_scene = build_demo_scene(**controls)
 
+    # Build per-scene clade-color maps (None when the toggle is off).
+    construction_clades = (
+        build_clade_colors(construction_scene) if color_by_clade else None
+    )
+    rebiopsy_clades = build_clade_colors(rebiopsy_scene) if color_by_clade else None
+
     construction_tab, rebiopsy_tab, raw_tab = st.tabs(
         ["Embryo construction", "Rebiopsy", "Scene data"]
     )
 
     with construction_tab:
         _show_scene(
-            construction_scene, title_prefix="Construction", autorotate=autorotate
+            construction_scene,
+            title_prefix="Construction",
+            autorotate=autorotate,
+            clade_colors=construction_clades,
         )
         _show_tables(construction_scene)
 
     with rebiopsy_tab:
-        _show_scene(rebiopsy_scene, title_prefix="Rebiopsy", autorotate=autorotate)
+        _show_scene(
+            rebiopsy_scene,
+            title_prefix="Rebiopsy",
+            autorotate=autorotate,
+            clade_colors=rebiopsy_clades,
+        )
         _show_tables(rebiopsy_scene)
         if rebiopsy_scene.biopsy is not None:
             st.caption(

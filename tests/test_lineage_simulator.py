@@ -433,7 +433,8 @@ def test_cell_initialization_defaults():
     assert root.generation == 0
     assert root.children == []
     assert root.is_aneuploid is False
-    assert root.is_dead is False
+    assert root.divides_erroneously is False
+    assert root.error_progenitor is None
     assert root.position is None
     assert root.layer_position is None
     assert isinstance(root.id, str) and len(root.id) > 0
